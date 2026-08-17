@@ -1,0 +1,6 @@
+{
+  "name": "Mekanik+",
+  "description": "Plateforme automobile professionnelle pour l'Algérie : recherche VIN/moteur, catalogue de pièces OEM/équivalences, schémas techniques, gestion atelier, vendeurs et diagnostic MekanikAI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
