@@ -1,0 +1,335 @@
+{
+  "entities": {
+    "UserRbacProfile": {
+      "title": "UserRbacProfile",
+      "description": "Stores the user identity, RBAC role (SUPER_ADMIN, GESTIONNAIRE, TECHNICIEN), hardware device fingerprint binding, and security shield status.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Authenticated user email."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full name or operator name."
+        },
+        "rbacRole": {
+          "type": "string",
+          "enum": ["SUPER_ADMIN", "GESTIONNAIRE", "TECHNICIEN"],
+          "description": "RBAC role restricting DMS and sensitive data access."
+        },
+        "boundHardwareDeviceId": {
+          "type": "string",
+          "description": "Android Keystore Hardware-Backed Device Fingerprint ID."
+        },
+        "wilaya": {
+          "type": "string",
+          "description": "Authorized Wilaya location."
+        },
+        "operatorPinHash": {
+          "type": "string",
+          "description": "Hashed 4-digit operator PIN for workshop kiosk lock."
+        },
+        "isRemoteWiped": {
+          "type": "boolean",
+          "description": "True if offline AES-256-GCM cache was remotely wiped."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "email", "displayName", "rbacRole", "boundHardwareDeviceId", "wilaya", "createdAt", "updatedAt"]
+    },
+    "UserAccountSelection": {
+      "title": "UserAccountSelection",
+      "description": "Stores the user's selected AccountRole (CONDUCTEUR, GARAGE_PRO, VENDEUR_PIECES, ATELIER_MAGASIN_MIXTE, ATELIER_CARROSSERIE, LOCATION_VOITURES) chosen in AccountSelector on first login, including hybrid sub-accounts and external MecaVerif+ rate.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Authenticated user email."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Primary account holder or company manager name."
+        },
+        "accountRole": {
+          "type": "string",
+          "enum": [
+            "CONDUCTEUR",
+            "GARAGE_PRO",
+            "VENDEUR_PIECES",
+            "ATELIER_MAGASIN_MIXTE",
+            "ATELIER_CARROSSERIE",
+            "LOCATION_VOITURES"
+          ],
+          "description": "Selected account role that dynamically filters all application menus and screens."
+        },
+        "organizationName": {
+          "type": "string",
+          "description": "Name of the workshop, parts store, hybrid shop, bodyshop, or enterprise."
+        },
+        "wilaya": {
+          "type": "string",
+          "description": "Wilaya of the user or business."
+        },
+        "subAccountsCount": {
+          "type": "integer",
+          "description": "Number of configured sub-accounts (e.g. 3 or 4 for ATELIER_MAGASIN_MIXTE)."
+        },
+        "subAccountsSummary": {
+          "type": "string",
+          "description": "Summary of the primary account and configured sub-accounts."
+        },
+        "subscriptionPriceDzd": {
+          "type": "integer",
+          "description": "Annual subscription price in DZD for the chosen account role."
+        },
+        "mecaVerifFeePerVinDzd": {
+          "type": "integer",
+          "description": "External per-VIN fee in DZD for MecaVerif+ (250 or 300 DA, not included in subscriptions)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "email",
+        "displayName",
+        "accountRole",
+        "organizationName",
+        "wilaya",
+        "subAccountsCount",
+        "subAccountsSummary",
+        "subscriptionPriceDzd",
+        "mecaVerifFeePerVinDzd",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SecurityAuditEvent": {
+      "title": "SecurityAuditEvent",
+      "description": "Tamper-proof audit log entry with HMAC-SHA256 signature for RBAC actions, hardware binding, anti-scraping, and DMS operations.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the operator."
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Display name of the operator."
+        },
+        "rbacRole": {
+          "type": "string",
+          "enum": ["SUPER_ADMIN", "GESTIONNAIRE", "TECHNICIEN"],
+          "description": "Role of the operator at the time of the action."
+        },
+        "shieldCategory": {
+          "type": "string",
+          "description": "Security shield module (HARDWARE_BINDING, ANTI_SCRAPING, HMAC_SIGNATURE, AES256_VAULT, PLAY_INTEGRITY, RBAC_AUDIT)."
+        },
+        "actionDescription": {
+          "type": "string",
+          "description": "Detailed description of the security or DMS operation."
+        },
+        "hmacSha256Seal": {
+          "type": "string",
+          "description": "Cryptographic HMAC-SHA256 seal verifying document/event integrity."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on creation (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "operatorName", "rbacRole", "shieldCategory", "actionDescription", "hmacSha256Seal", "createdAt"]
+    },
+    "VendorStockItem": {
+      "title": "VendorStockItem",
+      "description": "Real-time vendor part stock item for Espace Vendeur.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the vendor."
+        },
+        "vendorName": {
+          "type": "string",
+          "description": "Store name and Wilaya."
+        },
+        "partName": {
+          "type": "string",
+          "description": "Part name."
+        },
+        "oemReference": {
+          "type": "string",
+          "description": "Primary OEM part reference."
+        },
+        "iamReference": {
+          "type": "string",
+          "description": "IAM equivalent brand and reference."
+        },
+        "quantityInStock": {
+          "type": "integer",
+          "description": "Current stock quantity."
+        },
+        "priceDzd": {
+          "type": "integer",
+          "description": "Unit price in Algerian Dinars (DZD)."
+        },
+        "availabilityStatus": {
+          "type": "string",
+          "enum": ["EN_STOCK", "STOCK_FAIBLE", "SUR_COMMANDE", "RUPTURE"],
+          "description": "Real-time availability status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on update."
+        }
+      },
+      "required": ["userId", "vendorName", "partName", "oemReference", "iamReference", "quantityInStock", "priceDzd", "availabilityStatus", "createdAt", "updatedAt"]
+    },
+    "SystemErrorLog": {
+      "title": "SystemErrorLog",
+      "description": "Centralized error log entry capturing runtime crashes, API connection failures, and local persistence/Firebase sync failures for SuperAdmin monitoring.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user/session where the error occurred."
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "Email of the authenticated user or operator."
+        },
+        "rbacRole": {
+          "type": "string",
+          "enum": ["SUPER_ADMIN", "GESTIONNAIRE", "TECHNICIEN"],
+          "description": "RBAC role of the operator when the error occurred."
+        },
+        "errorCategory": {
+          "type": "string",
+          "enum": ["CRASH_RUNTIME", "API_CONNECTION_FAILURE", "LOCAL_PERSISTENCE_FAILURE", "CLIENT_BUG_REPORT"],
+          "description": "Category of the captured error or client bug report."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["CRITICAL", "HIGH", "WARNING", "INFO"],
+          "description": "Severity level of the error."
+        },
+        "moduleSource": {
+          "type": "string",
+          "description": "Subsystem or module that raised the error."
+        },
+        "errorCode": {
+          "type": "string",
+          "description": "Machine-readable error code or exception type."
+        },
+        "errorTitle": {
+          "type": "string",
+          "description": "Concise summary title of the error."
+        },
+        "technicalMessage": {
+          "type": "string",
+          "description": "Detailed diagnostic message."
+        },
+        "stackTracePreview": {
+          "type": "string",
+          "description": "Stack trace snippet or structured diagnostic payload."
+        },
+        "deviceHardwareInfo": {
+          "type": "string",
+          "description": "Hardware fingerprint, Android version, and Wilaya."
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": ["OPEN", "INVESTIGATING", "AI_REPAIRING", "AUTO_REPAIRED_BY_AI", "RESOLVED", "IGNORED"],
+          "description": "Current AI self-healing or SuperAdmin resolution status."
+        },
+        "superAdminNote": {
+          "type": "string",
+          "description": "AI Auto-Repair patch summary or diagnostic note added by SuperAdmin."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp on update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "userEmail",
+        "rbacRole",
+        "errorCategory",
+        "severity",
+        "moduleSource",
+        "errorCode",
+        "errorTitle",
+        "technicalMessage",
+        "stackTracePreview",
+        "deviceHardwareInfo",
+        "resolutionStatus",
+        "superAdminNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserRbacProfile" },
+      "description": "User RBAC profile and hardware device binding."
+    },
+    "/user_account_selections/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccountSelection" },
+      "description": "User account role chosen via AccountSelector on first login to dynamically filter the UI."
+    },
+    "/security_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/SecurityAuditEvent" },
+      "description": "Tamper-proof RBAC and Mekanik+ Shield security audit events."
+    },
+    "/vendor_stock/{stockId}": {
+      "schema": { "$ref": "#/entities/VendorStockItem" },
+      "description": "Real-time inventory management items for Espace Vendeur."
+    },
+    "/system_error_logs/{errorId}": {
+      "schema": { "$ref": "#/entities/SystemErrorLog" },
+      "description": "Error Logger records for runtime crashes, API connection issues, and local/Firebase persistence failures."
+    }
+  }
+}

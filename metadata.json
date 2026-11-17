@@ -1,0 +1,6 @@
+{
+  "name": "DMS Mécanicauto+",
+  "description": "DMS Mécanicauto+ : Système de gestion automobile intégré, scanner vision étiquette pièce (code-barres/QR, compatibilité châssis, montage), audit historique payant MécaVerif+ et diagnostic MekanikAI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

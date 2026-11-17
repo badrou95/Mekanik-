@@ -1,0 +1,340 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'badroumc@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidRbacRole(role) {
+      return role is string && (
+        role == 'SUPER_ADMIN' ||
+        role == 'GESTIONNAIRE' ||
+        role == 'TECHNICIEN'
+      );
+    }
+
+    function isValidAccountRole(role) {
+      return role is string && (
+        role == 'CONDUCTEUR' ||
+        role == 'GARAGE_PRO' ||
+        role == 'VENDEUR_PIECES' ||
+        role == 'ATELIER_MAGASIN_MIXTE' ||
+        role == 'ATELIER_CARROSSERIE' ||
+        role == 'LOCATION_VOITURES'
+      );
+    }
+
+    function isValidUserRbacProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             isValidRbacRole(data.rbacRole) &&
+             data.boundHardwareDeviceId is string && data.boundHardwareDeviceId.size() >= 4 && data.boundHardwareDeviceId.size() <= 128 &&
+             data.wilaya is string && data.wilaya.size() >= 2 && data.wilaya.size() <= 80 &&
+             (!('operatorPinHash' in data) || data.operatorPinHash == null || (data.operatorPinHash is string && data.operatorPinHash.size() <= 128)) &&
+             (!('isRemoteWiped' in data) || data.isRemoteWiped == null || data.isRemoteWiped is bool) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserAccountSelection(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             isValidAccountRole(data.accountRole) &&
+             data.organizationName is string && data.organizationName.size() >= 2 && data.organizationName.size() <= 140 &&
+             data.wilaya is string && data.wilaya.size() >= 2 && data.wilaya.size() <= 80 &&
+             data.subAccountsCount is int && data.subAccountsCount >= 0 && data.subAccountsCount <= 20 &&
+             data.subAccountsSummary is string && data.subAccountsSummary.size() >= 2 && data.subAccountsSummary.size() <= 400 &&
+             data.subscriptionPriceDzd is int && data.subscriptionPriceDzd >= 0 && data.subscriptionPriceDzd <= 500000 &&
+             data.mecaVerifFeePerVinDzd is int && (data.mecaVerifFeePerVinDzd == 250 || data.mecaVerifFeePerVinDzd == 300) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSecurityAuditEvent(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.operatorName is string && data.operatorName.size() >= 1 && data.operatorName.size() <= 100 &&
+             isValidRbacRole(data.rbacRole) &&
+             data.shieldCategory is string && data.shieldCategory.size() >= 2 && data.shieldCategory.size() <= 60 &&
+             data.actionDescription is string && data.actionDescription.size() >= 2 && data.actionDescription.size() <= 500 &&
+             data.hmacSha256Seal is string && data.hmacSha256Seal.size() >= 8 && data.hmacSha256Seal.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidAvailabilityStatus(status) {
+      return status is string && (
+        status == 'EN_STOCK' ||
+        status == 'STOCK_FAIBLE' ||
+        status == 'SUR_COMMANDE' ||
+        status == 'RUPTURE'
+      );
+    }
+
+    function isValidVendorStockItem(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.vendorName is string && data.vendorName.size() >= 2 && data.vendorName.size() <= 120 &&
+             data.partName is string && data.partName.size() >= 2 && data.partName.size() <= 160 &&
+             data.oemReference is string && data.oemReference.size() >= 2 && data.oemReference.size() <= 80 &&
+             data.iamReference is string && data.iamReference.size() >= 2 && data.iamReference.size() <= 120 &&
+             data.quantityInStock is int && data.quantityInStock >= 0 && data.quantityInStock <= 100000 &&
+             data.priceDzd is int && data.priceDzd >= 0 && data.priceDzd <= 50000000 &&
+             isValidAvailabilityStatus(data.availabilityStatus) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidErrorCategory(cat) {
+      return cat is string && (
+        cat == 'CRASH_RUNTIME' ||
+        cat == 'API_CONNECTION_FAILURE' ||
+        cat == 'LOCAL_PERSISTENCE_FAILURE' ||
+        cat == 'CLIENT_BUG_REPORT'
+      );
+    }
+
+    function isValidErrorSeverity(sev) {
+      return sev is string && (
+        sev == 'CRITICAL' ||
+        sev == 'HIGH' ||
+        sev == 'WARNING' ||
+        sev == 'INFO'
+      );
+    }
+
+    function isValidErrorResolutionStatus(status) {
+      return status is string && (
+        status == 'OPEN' ||
+        status == 'INVESTIGATING' ||
+        status == 'AI_REPAIRING' ||
+        status == 'AUTO_REPAIRED_BY_AI' ||
+        status == 'RESOLVED' ||
+        status == 'IGNORED'
+      );
+    }
+
+    function isValidSystemErrorLog(data) {
+      return data.userId is string && (data.userId == request.auth.uid || isSuperAdmin()) &&
+             data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 120 &&
+             isValidRbacRole(data.rbacRole) &&
+             isValidErrorCategory(data.errorCategory) &&
+             isValidErrorSeverity(data.severity) &&
+             data.moduleSource is string && data.moduleSource.size() >= 2 && data.moduleSource.size() <= 120 &&
+             data.errorCode is string && data.errorCode.size() >= 2 && data.errorCode.size() <= 100 &&
+             data.errorTitle is string && data.errorTitle.size() >= 2 && data.errorTitle.size() <= 200 &&
+             data.technicalMessage is string && data.technicalMessage.size() >= 2 && data.technicalMessage.size() <= 1000 &&
+             data.stackTracePreview is string && data.stackTracePreview.size() >= 2 && data.stackTracePreview.size() <= 2000 &&
+             data.deviceHardwareInfo is string && data.deviceHardwareInfo.size() >= 2 && data.deviceHardwareInfo.size() <= 200 &&
+             isValidErrorResolutionStatus(data.resolutionStatus) &&
+             data.superAdminNote is string && data.superAdminNote.size() <= 1500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 1. User RBAC Profiles & Hardware Binding
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSuperAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll(['userId', 'email', 'displayName', 'rbacRole', 'boundHardwareDeviceId', 'wilaya', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'email', 'displayName', 'rbacRole', 'boundHardwareDeviceId', 'wilaya', 'operatorPinHash', 'isRemoteWiped', 'createdAt', 'updatedAt']) &&
+                       isValidUserRbacProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUserRbacProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isSuperAdmin() ||
+                         (request.auth.uid == userId &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'rbacRole', 'boundHardwareDeviceId', 'wilaya', 'operatorPinHash', 'isRemoteWiped', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
+    }
+
+    // 1.5. AccountSelector Role Persistence (Particulier, Atelier, Magasin, Mixte Atelier+Magasin, Carrosserie, Entreprise)
+    match /user_account_selections/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSuperAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll([
+                         'userId',
+                         'email',
+                         'displayName',
+                         'accountRole',
+                         'organizationName',
+                         'wilaya',
+                         'subAccountsCount',
+                         'subAccountsSummary',
+                         'subscriptionPriceDzd',
+                         'mecaVerifFeePerVinDzd',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId',
+                         'email',
+                         'displayName',
+                         'accountRole',
+                         'organizationName',
+                         'wilaya',
+                         'subAccountsCount',
+                         'subAccountsSummary',
+                         'subscriptionPriceDzd',
+                         'mecaVerifFeePerVinDzd',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       isValidUserAccountSelection(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUserAccountSelection(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isSuperAdmin() ||
+                         (request.auth.uid == userId &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'displayName',
+                            'accountRole',
+                            'organizationName',
+                            'wilaya',
+                            'subAccountsCount',
+                            'subAccountsSummary',
+                            'subscriptionPriceDzd',
+                            'mecaVerifFeePerVinDzd',
+                            'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
+    }
+
+    // 2. Tamper-Proof Security & RBAC Audit Logs (Append-Only)
+    match /security_audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (existing().userId == request.auth.uid || isSuperAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSuperAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(logId) &&
+                       incoming().keys().hasAll(['userId', 'operatorName', 'rbacRole', 'shieldCategory', 'actionDescription', 'hmacSha256Seal', 'createdAt']) &&
+                       incoming().keys().hasOnly(['userId', 'operatorName', 'rbacRole', 'shieldCategory', 'actionDescription', 'hmacSha256Seal', 'createdAt']) &&
+                       isValidSecurityAuditEvent(incoming());
+
+      // Tamper-Proof Audit Log: No updates or deletes allowed
+      allow update, delete: if false;
+    }
+
+    // 3. Espace Vendeur Real-Time Inventory Management
+    match /vendor_stock/{stockId} {
+      allow get: if isSignedIn() && isValidId(stockId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(stockId) &&
+                       incoming().keys().hasAll(['userId', 'vendorName', 'partName', 'oemReference', 'iamReference', 'quantityInStock', 'priceDzd', 'availabilityStatus', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'vendorName', 'partName', 'oemReference', 'iamReference', 'quantityInStock', 'priceDzd', 'availabilityStatus', 'createdAt', 'updatedAt']) &&
+                       isValidVendorStockItem(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(stockId) &&
+                       isValidVendorStockItem(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isSuperAdmin() ||
+                         (request.auth.uid == existing().userId &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['vendorName', 'partName', 'oemReference', 'iamReference', 'quantityInStock', 'priceDzd', 'availabilityStatus', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(stockId) && (existing().userId == request.auth.uid || isSuperAdmin());
+    }
+
+    // 4. Centralized System Error Logger (Crashes, API Failures, Local/Firebase Persistence Errors)
+    match /system_error_logs/{errorId} {
+      allow get: if isSignedIn() && isValidId(errorId) && (existing().userId == request.auth.uid || isSuperAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSuperAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(errorId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId',
+                         'userEmail',
+                         'rbacRole',
+                         'errorCategory',
+                         'severity',
+                         'moduleSource',
+                         'errorCode',
+                         'errorTitle',
+                         'technicalMessage',
+                         'stackTracePreview',
+                         'deviceHardwareInfo',
+                         'resolutionStatus',
+                         'superAdminNote',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId',
+                         'userEmail',
+                         'rbacRole',
+                         'errorCategory',
+                         'severity',
+                         'moduleSource',
+                         'errorCode',
+                         'errorTitle',
+                         'technicalMessage',
+                         'stackTracePreview',
+                         'deviceHardwareInfo',
+                         'resolutionStatus',
+                         'superAdminNote',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       isValidSystemErrorLog(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(errorId) &&
+                       isValidSystemErrorLog(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isSuperAdmin() ||
+                         (request.auth.uid == existing().userId &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['resolutionStatus', 'superAdminNote', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(errorId) && (existing().userId == request.auth.uid || isSuperAdmin());
+    }
+  }
+}
