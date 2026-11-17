@@ -89,9 +89,9 @@ fun SuperAdminPortalModal(
   var showAddSubscriptionForm by remember { mutableStateOf(false) }
   var showCreateStaffForm by remember { mutableStateOf(false) }
 
-  // Login form state when locked
-  var emailInput by remember { mutableStateOf(adminSession.adminEmail) }
-  var passwordInput by remember { mutableStateOf("MekanikAdmin2026!") }
+  // Login form state when locked (aucun mot de passe pré-rempli ni affiché en clair)
+  var emailInput by remember { mutableStateOf("") }
+  var passwordInput by remember { mutableStateOf("") }
   var showPassword by remember { mutableStateOf(false) }
 
   val pendingRegistrationsCount = registrationRequests.count {
@@ -214,13 +214,10 @@ fun SuperAdminPortalModal(
 
         if (!adminSession.isAuthenticated) {
           // ====================================================================
-          // ÉCRAN DE CONNEXION SUPER-ADMINISTRATEUR (GOOGLE AUTHENTICATOR + SMS) & EMPLOYÉS
+          // ÉCRAN DE CONNEXION SUPER-ADMINISTRATEUR CACHÉ (/admin) — ZÉRO MOT DE PASSE EN CLAIR
           // ====================================================================
-          val liveLoginTotp = remember {
-            GoogleAuthenticatorTotpEngine.generateTotpCode(SuperAdminGlobalControlRegistry.SUPER_ADMIN_TOTP_SECRET)
-          }
-          var loginTotpInput by remember { mutableStateOf(liveLoginTotp) }
-          var loginSmsInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.activeSmsOtpCode) }
+          var loginTotpInput by remember { mutableStateOf("") }
+          var loginSmsInput by remember { mutableStateOf("") }
           var loginPhoneInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.superAdminPhoneNumber) }
           var login2FaError by remember { mutableStateOf<String?>(null) }
 
@@ -381,9 +378,7 @@ fun SuperAdminPortalModal(
 
                         OutlinedButton(
                           onClick = {
-                            val newSms = SuperAdminGlobalControlRegistry.sendNewSmsOtpToSuperAdminPhone(loginPhoneInput)
-                            loginSmsInput = newSms
-                            loginTotpInput = GoogleAuthenticatorTotpEngine.generateTotpCode(SuperAdminGlobalControlRegistry.SUPER_ADMIN_TOTP_SECRET)
+                            SuperAdminGlobalControlRegistry.sendNewSmsOtpToSuperAdminPhone(loginPhoneInput)
                             login2FaError = null
                           },
                           shape = RoundedCornerShape(10.dp),
@@ -412,7 +407,7 @@ fun SuperAdminPortalModal(
                     )
                   }
 
-                  // Quick Credentials Helper Box
+                  // Sécurité : Aucun identifiant ni mot de passe n'est publié en clair
                   Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = GraphiteBlack,
@@ -421,31 +416,31 @@ fun SuperAdminPortalModal(
                   ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                       Text(
-                        text = "🔑 IDENTIFIANTS SUPER-ADMIN & EMPLOYÉS PRÉ-CONFIGURÉS :",
+                        text = "🔒 ACCÈS ADMINISTRATEUR CACHÉ (/admin) — PROTECTION STRICTE :",
                         color = TechCyan,
                         fontWeight = FontWeight.Black,
                         fontSize = 10.sp
                       )
                       Text(
-                        text = "• Super-Admin Root : badroumc@gmail.com (Mdp : MekanikAdmin2026!)",
+                        text = "• Aucun mot de passe, code PIN ou code 2FA n'est affiché sur l'écran.",
                         color = OffWhite,
-                        fontSize = 10.5.sp,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 10.5.sp
                       )
-                      staffMembers.take(2).forEach { staff ->
-                        Text(
-                          text = "• Employé (${staff.fullName}) : ${staff.email} (PIN : ${staff.pinCode})",
-                          color = AluminumLight,
-                          fontSize = 10.sp,
-                          fontFamily = FontFamily.Monospace
-                        )
-                      }
+                      Text(
+                        text = "• Seul le propriétaire Super-Administrateur (badroumc@gmail.com) peut déverrouiller cette console.",
+                        color = AluminumLight,
+                        fontSize = 10.sp
+                      )
                     }
                   }
 
                   Button(
                     onClick = {
-                      onLoginAdmin(emailInput, passwordInput)
+                      if (emailInput.isBlank() || passwordInput.isBlank()) {
+                        login2FaError = "❌ Veuillez saisir votre adresse email administrateur et votre mot de passe."
+                        return@Button
+                      }
+                      onLoginAdmin(emailInput.trim(), passwordInput.trim())
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PerformanceRed),
@@ -461,27 +456,6 @@ fun SuperAdminPortalModal(
                       color = PureWhite,
                       fontWeight = FontWeight.Black,
                       fontSize = 12.5.sp
-                    )
-                  }
-
-                  OutlinedButton(
-                    onClick = {
-                      selectedTab = 7
-                      onLoginAdmin("badroumc@gmail.com", "MekanikAdmin2026!")
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, ElectricGreen),
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .testTag("btn_quick_admin_login")
-                  ) {
-                    Icon(Icons.Default.Bolt, contentDescription = null, tint = ElectricGreen, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                      text = "CONNEXION RAPIDE & CLÉS TECDOC / ETKA / STELLANTIS / VIN",
-                      color = ElectricGreen,
-                      fontWeight = FontWeight.Bold,
-                      fontSize = 10.5.sp
                     )
                   }
                 }
@@ -1287,7 +1261,7 @@ private fun AdminStaffMemberCard(
             }
           }
           Text(
-            text = "${staff.email} • PIN : ${staff.pinCode} • ${staff.lastActiveLabel}",
+            text = "${staff.email} • PIN : •••• (Masqué) • ${staff.lastActiveLabel}",
             color = AluminumLight,
             fontSize = 10.5.sp,
             fontFamily = FontFamily.Monospace

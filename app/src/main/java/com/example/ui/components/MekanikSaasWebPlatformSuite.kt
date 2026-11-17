@@ -395,6 +395,45 @@ object MekanikSaasPlatformRegistry {
             quantity = 5,
             unitPriceB2bDzd = 33500,
             status = "EXPÉDIÉE"
+        ),
+        SaasB2bSupplyRequestOrder(
+            id = "CMD-B2B-2026-804",
+            createdAt = "14/11/2026 • 11:05",
+            requesterOrgId = "ORG-MAGASIN-SETIF-04",
+            requesterName = "Comptoir Pièces OEM Hauts-Plateaux",
+            requesterType = "MAGASIN PIÈCES",
+            targetVehicleVin = "WVWZZZAUZHW129834",
+            partOemRef = "04L 198 119 A",
+            partName = "Kit de Distribution Complet + Pompe à Eau",
+            quantity = 4,
+            unitPriceB2bDzd = 26800,
+            status = "LIVRÉE"
+        ),
+        SaasB2bSupplyRequestOrder(
+            id = "CMD-B2B-2026-805",
+            createdAt = "Aujourd'hui • 08:50",
+            requesterOrgId = "ORG-ATELIER-ORAN-02",
+            requesterName = "Atelier Mécanique & Diagnostic Oran Pro",
+            requesterType = "ATELIER PRO",
+            targetVehicleVin = "WVWZZZAUZHW129834",
+            partOemRef = "04L 253 010 B",
+            partName = "Turbocompresseur Géométrie Variable (Actuateur Électronique)",
+            quantity = 1,
+            unitPriceB2bDzd = 92000,
+            status = "EN PRÉPARATION"
+        ),
+        SaasB2bSupplyRequestOrder(
+            id = "CMD-B2B-2026-806",
+            createdAt = "13/11/2026 • 14:30",
+            requesterOrgId = "ORG-ATELIER-ORAN-02",
+            requesterName = "Atelier Mécanique & Diagnostic Oran Pro",
+            requesterType = "ATELIER PRO",
+            targetVehicleVin = "WVWZZZAUZHW129834",
+            partOemRef = "04L 198 119 A",
+            partName = "Kit de Distribution Complet + Pompe à Eau",
+            quantity = 2,
+            unitPriceB2bDzd = 26800,
+            status = "LIVRÉE"
         )
     )
 
@@ -702,42 +741,44 @@ fun MekanikSaasPlatformHomeBanner(
                 }
             }
 
-            // Accès direct à chacun des 6 Espaces SaaS (A à F)
+            // Accès direct aux Espaces SaaS Publics (A à E — le panneau /admin est strictement caché)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SaasSpace.entries.forEach { space ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = SaasBgPrimary,
-                        border = BorderStroke(1.dp, SaasBorder),
-                        modifier = Modifier
-                            .clickable { onOpenSaasPlatform(space) }
-                            .testTag("chip_open_saas_space_${space.code}")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                SaasSpace.entries
+                    .filter { it != SaasSpace.ADMINISTRATION_GENERALE }
+                    .forEach { space ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SaasBgPrimary,
+                            border = BorderStroke(1.dp, SaasBorder),
+                            modifier = Modifier
+                                .clickable { onOpenSaasPlatform(space) }
+                                .testTag("chip_open_saas_space_${space.code}")
                         ) {
-                            Icon(
-                                imageVector = space.icon,
-                                contentDescription = null,
-                                tint = SaasOrange,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "${space.code}. ${space.shortLabel}",
-                                color = SaasTextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = space.icon,
+                                    contentDescription = null,
+                                    tint = SaasOrange,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "${space.code}. ${space.shortLabel}",
+                                    color = SaasTextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
-                }
             }
         }
     }
@@ -760,12 +801,23 @@ fun MekanikSaasWebPlatformModal(
     var activeSpace by remember { mutableStateOf(MekanikSaasPlatformRegistry.activeSaasSpace) }
     var desktopMode by remember { mutableStateOf(MekanikSaasPlatformRegistry.forceDesktopSidebarLayout) }
     var universalVinQuery by remember { mutableStateOf("WVWZZZAUZHW129834") }
+    var isHiddenAdminRouteUnlocked by remember {
+        mutableStateOf(MekanikSaasPlatformRegistry.activeSaasSpace == SaasSpace.ADMINISTRATION_GENERALE)
+    }
     var vinDecodedBanner by remember {
         mutableStateOf<String?>(
             "VIN WVWZZZAUZHW129834 identifié : Volkswagen Golf 7 2.0 TDI 150ch (Moteur CRLB • Boîte DSG6 • Année 2019 • 48 pièces OEM en stock Fournisseur)"
         )
     }
     var feedbackToast by remember { mutableStateOf<String?>(null) }
+
+    val visibleSaasSpaces = remember(isHiddenAdminRouteUnlocked) {
+        if (isHiddenAdminRouteUnlocked) {
+            SaasSpace.entries
+        } else {
+            SaasSpace.entries.filter { it != SaasSpace.ADMINISTRATION_GENERALE }
+        }
+    }
 
     val activeOrg = MekanikSaasPlatformRegistry.organizations.firstOrNull {
         it.organizationId == MekanikSaasPlatformRegistry.activeOrganizationId
@@ -960,14 +1012,14 @@ fun MekanikSaasWebPlatformModal(
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = "NAVIGATION SAAS (6 ESPACES)",
+                                        text = "NAVIGATION SAAS CLIENT",
                                         color = SaasTextSecondary,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 9.5.sp,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                                     )
 
-                                    SaasSpace.entries.forEach { space ->
+                                    visibleSaasSpaces.forEach { space ->
                                         val selected = activeSpace == space
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
@@ -1036,12 +1088,14 @@ fun MekanikSaasWebPlatformModal(
                                         accent = SaasGreen,
                                         onClick = onOpenMecaVerifScreen
                                     )
-                                    SidebarQuickToolButton(
-                                        label = "Clés API TecDoc / ETKA / Stellantis",
-                                        icon = Icons.Default.VpnKey,
-                                        accent = SaasPerformanceRed,
-                                        onClick = { onOpenSuperAdminConsole(7) }
-                                    )
+                                    if (isHiddenAdminRouteUnlocked) {
+                                        SidebarQuickToolButton(
+                                            label = "/admin • Console Super-Admin",
+                                            icon = Icons.Default.VpnKey,
+                                            accent = SaasPerformanceRed,
+                                            onClick = { onOpenSuperAdminConsole(7) }
+                                        )
+                                    }
                                 }
 
                                 // Pied de barre latérale : Sécurité Multi-Tenant & 2FA
@@ -1082,8 +1136,15 @@ fun MekanikSaasWebPlatformModal(
                                 onVinQueryChange = { universalVinQuery = it },
                                 vinDecodedBanner = vinDecodedBanner,
                                 onDecodeVin = { mode ->
-                                    vinDecodedBanner = "[$mode] Analyse instantanée de '$universalVinQuery' : Volkswagen Golf 7 2.0 TDI 150ch (Code Moteur CRLB • Année 2019 • 48 réf. OEM compatibles en stock)"
-                                    feedbackToast = "✅ Recherche $mode exécutée avec succès sur la base centrale MEKANIK+"
+                                    if (universalVinQuery.trim().equals("/admin", ignoreCase = true)) {
+                                        isHiddenAdminRouteUnlocked = true
+                                        activeSpace = SaasSpace.ADMINISTRATION_GENERALE
+                                        MekanikSaasPlatformRegistry.activeSaasSpace = SaasSpace.ADMINISTRATION_GENERALE
+                                        feedbackToast = "🔐 Route cachée /admin déverrouillée : ouverture du Panneau Super-Administrateur"
+                                    } else {
+                                        vinDecodedBanner = "[$mode] Analyse instantanée de '$universalVinQuery' : Volkswagen Golf 7 2.0 TDI 150ch (Code Moteur CRLB • Année 2019 • 48 réf. OEM compatibles en stock)"
+                                        feedbackToast = "✅ Recherche $mode exécutée avec succès sur la base centrale MEKANIK+"
+                                    }
                                 },
                                 onNavigateToSpace = { target ->
                                     activeSpace = target
@@ -1155,7 +1216,7 @@ fun MekanikSaasWebPlatformModal(
                                 .padding(horizontal = 8.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            SaasSpace.entries.forEach { space ->
+                            visibleSaasSpaces.forEach { space ->
                                 val selected = activeSpace == space
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
@@ -1240,12 +1301,39 @@ private fun SaasPublicSiteView(
     onRegisterOrganization: (SaasOrganizationTenant) -> Unit
 ) {
     var selectedSearchMode by remember { mutableStateOf("VIN") }
+    var isAnnualBilling by remember { mutableStateOf(true) } // true = Abonnement Annuel (-20%), false = Abonnement Par Mois
+    var logoRevealExpanded by remember { mutableStateOf(true) }
+    var activeTutorialChapter by remember { mutableIntStateOf(0) }
+    var isTutorialVideoPlaying by remember { mutableStateOf(false) }
     var orgNameInput by remember { mutableStateOf("") }
     var orgTypeInput by remember { mutableStateOf("MIXTE_ATELIER_MAGASIN") }
     var orgWilayaInput by remember { mutableStateOf("Alger") }
     var orgManagerInput by remember { mutableStateOf("") }
     var orgEmailInput by remember { mutableStateOf("") }
     var orgPhoneInput by remember { mutableStateOf("+213 ") }
+
+    val tutorialChapters = listOf(
+        Triple(
+            "1. Comment ouvrir un compte & choisir Mensuel ou Annuel",
+            "01:15",
+            "Sélectionnez votre formule métier (Atelier, Magasin, Mixte 1+4, Carrosserie, Fournisseur B2B ou Particulier), choisissez Abonnement Par Mois ou Par An (-20%) et réglez via CIB/Edahabia, BaridiMob ou Stripe."
+        ),
+        Triple(
+            "2. Comment accéder avec Double Authentification (2FA)",
+            "01:05",
+            "Connectez-vous avec votre email, votre mot de passe personnel et votre code à 6 chiffres Google Authenticator / SMS. Chaque organisation est strictement isolée."
+        ),
+        Triple(
+            "3. Comment travailler : VIN, Réf OEM, Devis & Commandes",
+            "01:40",
+            "Identifiez le véhicule par VIN 17 caractères, consultez les références OEM en rouge/orange, créez vos Devis/OR et suivez votre Historique des Commandes B2B en temps réel."
+        ),
+        Triple(
+            "4. Comment utiliser MécaVerif+ & MekanikAI OBD-II",
+            "01:20",
+            "Achetez un rapport MécaVerif+ (250/300 DA) avec courbe kilométrique et photos carrosserie Avant/Après obligatoires, ou lancez MekanikAI pour analyser un code défaut DTC."
+        )
+    )
 
     LazyColumn(
         modifier = Modifier
@@ -1254,7 +1342,7 @@ private fun SaasPublicSiteView(
             .testTag("saas_public_site_view"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. HERO ZONE : MEKANIK+ « La plateforme automobile nouvelle génération »
+        // 1. OUVERTURE ANIMÉE DU LOGO MEKANIK+ & PRÉSENTATION COMPLÈTE DE LA PLATEFORME
         item {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -1273,16 +1361,44 @@ private fun SaasPublicSiteView(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Emblème Logo MEKANIK+ interactif qui s'ouvre pour révéler la présentation
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = SaasBgPrimary,
+                        border = BorderStroke(2.dp, SaasOrange),
+                        modifier = Modifier
+                            .size(78.dp)
+                            .clickable { logoRevealExpanded = !logoRevealExpanded }
+                            .testTag("public_facade_animated_logo")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.PrecisionManufacturing,
+                                    contentDescription = "Logo Mekanik+",
+                                    tint = SaasOrange,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                                Text(
+                                    text = "+",
+                                    color = SaasPerformanceRed,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 26.sp
+                                )
+                            }
+                        }
+                    }
+
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = SaasOrange.copy(alpha = 0.16f),
                         border = BorderStroke(1.dp, SaasOrange)
                     ) {
                         Text(
-                            text = "PLATEFORME WEB SAAS AUTOMOBILE & DMS MÉCANICAUTO+",
+                            text = "FAÇADE OFFICIELLE MEKANIK+ • LOGO ANIMÉ, PRÉSENTATION, TARIFS & VIDÉO TUTO",
                             color = SaasOrange,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
@@ -1309,6 +1425,35 @@ private fun SaasPublicSiteView(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
+
+                    if (logoRevealExpanded) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = SaasBgPrimary,
+                            border = BorderStroke(1.dp, SaasBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "CE QUE FAIT & PROPOSE LA PLATEFORME MEKANIK+ :",
+                                    color = SaasOrange,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.5.sp
+                                )
+                                Text(
+                                    text = "• Identification VIN 17 caractères & Codes Moteur (TecDoc, ETKA VAG, Stellantis ServiceBox, Renault Dialogys).\n" +
+                                        "• Gestion DMS Atelier Pro, Devis/OR, Magasin de Pièces OEM, Compte Mixte (1+4), Carrosserie (Photos Avant/Après) et Fournisseur B2B.\n" +
+                                        "• Historique des Commandes B2B isolé par organisation, Diagnostic MekanikAI OBD-II et Audit MécaVerif+ (250/300 DA).",
+                                    color = SaasTextPrimary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
 
                     // Les 3 modes de recherche : [ VIN ] [ CODE MOTEUR ] [ RECHERCHE VÉHICULE ]
                     Row(
@@ -1426,7 +1571,127 @@ private fun SaasPublicSiteView(
             }
         }
 
-        // 2. PRÉSENTATION DES ABONNEMENTS & FORMULES DE COMPTES SÉPARÉES
+        // 1B. VIDÉO TUTORIEL OFFICIEL MEKANIK+ (COMMENT OUVRIR UN COMPTE, ACCÉDER & TRAVAILLER)
+        item {
+            val currentChap = tutorialChapters[activeTutorialChapter]
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SaasSurfaceCard,
+                border = BorderStroke(1.5.dp, SaasCyan)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🎬 VIDÉO TUTORIEL OFFICIEL : OUVRIR UN COMPTE, ACCÉDER & TRAVAILLER",
+                                color = SaasCyan,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Guide interactif en 4 chapitres pour maîtriser l'inscription, la connexion 2FA et les outils professionnels.",
+                                color = SaasTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Button(
+                            onClick = { isTutorialVideoPlaying = !isTutorialVideoPlaying },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isTutorialVideoPlaying) SaasPerformanceRed else SaasGreen
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isTutorialVideoPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isTutorialVideoPlaying) "Pause" else "Lancer Tuto",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SaasBgPrimary,
+                        border = BorderStroke(1.dp, SaasOrange),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = currentChap.first,
+                                    color = SaasOrange,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.5.sp
+                                )
+                                Text(
+                                    text = "Durée : ${currentChap.second}",
+                                    color = SaasGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                text = currentChap.third,
+                                color = SaasTextPrimary,
+                                fontSize = 11.5.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        tutorialChapters.forEachIndexed { idx, chap ->
+                            val selected = activeTutorialChapter == idx
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) SaasOrange else SaasBgPrimary,
+                                border = BorderStroke(1.dp, if (selected) SaasOrange else SaasBorder),
+                                modifier = Modifier.clickable {
+                                    activeTutorialChapter = idx
+                                    isTutorialVideoPlaying = true
+                                }
+                            ) {
+                                Text(
+                                    text = "Chapitre ${idx + 1} (${chap.second})",
+                                    color = if (selected) Color.White else SaasTextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.5.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. PRÉSENTATION DES ABONNEMENTS (PAR MOIS OU PAR AN -20%) & FORMULES SÉPARÉES
         item {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -1437,17 +1702,85 @@ private fun SaasPublicSiteView(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "GRILLE DES ABONNEMENTS SAAS PAR TYPE DE COMPTE",
-                        color = SaasOrange,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.5.sp
-                    )
-                    Text(
-                        text = "Chaque compte affiche exclusivement les outils adaptés à son métier. Le service MécaVerif+™ (250 ou 300 DA par numéro de châssis) est externe et facturé à l'acte.",
-                        color = SaasTextSecondary,
-                        fontSize = 11.5.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "TARIFS & ABONNEMENTS SAAS : PAR MOIS OU PAR AN (-20%)",
+                                color = SaasOrange,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.5.sp
+                            )
+                            Text(
+                                text = "Choisissez votre cycle de facturation (Mensuel ou Annuel avec 2 mois offerts) et votre formule métier.",
+                                color = SaasTextSecondary,
+                                fontSize = 11.5.sp
+                            )
+                        }
+                    }
+
+                    // Sélecteur Abonnement Par Mois vs Abonnement Annuel (-20%)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (!isAnnualBilling) SaasOrange else SaasBgPrimary,
+                            border = BorderStroke(1.dp, if (!isAnnualBilling) SaasOrange else SaasBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { isAnnualBilling = false }
+                                .testTag("btn_toggle_billing_monthly")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "📅 ABONNEMENT PAR MOIS",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "Sans engagement • Paiement mensuel",
+                                    color = if (!isAnnualBilling) Color.White else SaasTextSecondary,
+                                    fontSize = 9.5.sp
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isAnnualBilling) SaasGreen else SaasBgPrimary,
+                            border = BorderStroke(1.dp, if (isAnnualBilling) SaasGreen else SaasBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { isAnnualBilling = true }
+                                .testTag("btn_toggle_billing_annual")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "🏆 ABONNEMENT ANNUEL (-20%)",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "2 Mois Offerts • Facturation annuelle",
+                                    color = if (isAnnualBilling) Color.White else SaasTextSecondary,
+                                    fontSize = 9.5.sp
+                                )
+                            }
+                        }
+                    }
 
                     Row(
                         modifier = Modifier
@@ -1464,21 +1797,21 @@ private fun SaasPublicSiteView(
                         )
                         SaasPlanCard(
                             title = "Atelier Mécanique Pro",
-                            price = "9 900 DA / mois",
+                            price = if (isAnnualBilling) "7 920 DA / mois (95 040 DA/an)" else "9 900 DA / mois",
                             sub = "DMS complet, VIN, Devis/OR, MekanikAI OBD, Schémas & 3 sous-comptes",
                             targetSpace = SaasSpace.ESPACE_ATELIER,
                             onSelect = onNavigateToSpace
                         )
                         SaasPlanCard(
                             title = "Magasin Pièces Détachées",
-                            price = "9 500 DA / mois",
+                            price = if (isAnnualBilling) "7 600 DA / mois (91 200 DA/an)" else "9 500 DA / mois",
                             sub = "Catalogue OEM TecDoc/ETKA/Stellantis, Stock, Scanner QR & Comptoir",
                             targetSpace = SaasSpace.ESPACE_MAGASIN,
                             onSelect = onNavigateToSpace
                         )
                         SaasPlanCard(
                             title = "Compte Mixte (Atelier + Magasin)",
-                            price = "14 900 DA / mois",
+                            price = if (isAnnualBilling) "11 920 DA / mois (143 040 DA/an)" else "14 900 DA / mois",
                             sub = "1 Compte Principal + 4 Sous-Comptes • Toutes les options Atelier + Magasin",
                             targetSpace = SaasSpace.ESPACE_ATELIER,
                             isHighlighted = true,
@@ -1486,14 +1819,14 @@ private fun SaasPublicSiteView(
                         )
                         SaasPlanCard(
                             title = "Spécial Carrosserie & Tôlerie",
-                            price = "8 900 DA / mois",
+                            price = if (isAnnualBilling) "7 120 DA / mois (85 440 DA/an)" else "8 900 DA / mois",
                             sub = "Pièces tôlerie/plastique par VIN + Photos Avant/Après obligatoires",
                             targetSpace = SaasSpace.ESPACE_ATELIER,
                             onSelect = onNavigateToSpace
                         )
                         SaasPlanCard(
                             title = "Espace Fournisseur / Grossiste B2B",
-                            price = "24 900 DA / mois",
+                            price = if (isAnnualBilling) "19 920 DA / mois (239 040 DA/an)" else "24 900 DA / mois",
                             sub = "Catalogue B2B, gestion des prix/remises, stocks dépôts & commandes garages",
                             targetSpace = SaasSpace.ESPACE_FOURNISSEUR,
                             onSelect = onNavigateToSpace
@@ -2283,6 +2616,145 @@ private fun SaasWorkshopSpaceView(
                 }
             }
         }
+
+        // 4. Page / Section Historique des Commandes de l'Atelier (filtrée sur activeOrg.organizationId)
+        item {
+            SaasOrganizationOrderHistoryCard(activeOrg = activeOrg)
+        }
+    }
+}
+
+// ============================================================================
+// COMPOSANT : HISTORIQUE DES COMMANDES FILTRÉ PAR ID ORGANISATION
+// (Pour les comptes MAGASIN_PIECES et ATELIER_PRO)
+// ============================================================================
+@Composable
+private fun SaasOrganizationOrderHistoryCard(
+    activeOrg: SaasOrganizationTenant
+) {
+    val orgFilteredOrders = MekanikSaasPlatformRegistry.b2bSupplyOrders.filter {
+        it.requesterOrgId == activeOrg.organizationId
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = SaasSurfaceCard,
+        border = BorderStroke(1.5.dp, SaasOrange),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("organization_order_history_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "📦 HISTORIQUE DES COMMANDES PASSÉES (${activeOrg.name})",
+                        color = SaasOrange,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.5.sp
+                    )
+                    Text(
+                        text = "Filtré strictement sur l'ID de l'organisation actuelle : ${activeOrg.organizationId} (${orgFilteredOrders.size} commande(s))",
+                        color = SaasTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SaasGreen.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, SaasGreen)
+                ) {
+                    Text(
+                        text = "ORG : ${activeOrg.organizationId}",
+                        color = SaasGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            if (orgFilteredOrders.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = SaasBgPrimary,
+                    border = BorderStroke(1.dp, SaasBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Aucune commande B2B enregistrée pour l'organisation ${activeOrg.organizationId}.",
+                        color = SaasTextSecondary,
+                        fontSize = 11.5.sp,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            } else {
+                orgFilteredOrders.forEach { order ->
+                    val statusColor = when {
+                        order.status.contains("LIVRÉE") -> SaasGreen
+                        order.status.contains("EXPÉDIÉE") -> SaasCyan
+                        else -> SaasOrange
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SaasBgPrimary,
+                        border = BorderStroke(1.dp, SaasBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "${order.id} • ${order.partName}",
+                                    color = SaasTextPrimary,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.5.sp
+                                )
+                                Text(
+                                    text = "Réf OEM : ${order.partOemRef} • VIN : ${order.targetVehicleVin} • Date : ${order.createdAt}",
+                                    color = SaasOrange,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.5.sp
+                                )
+                                Text(
+                                    text = "Qté : ${order.quantity} × ${order.unitPriceB2bDzd} DA • Total : ${order.quantity * order.unitPriceB2bDzd} DA",
+                                    color = SaasTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = statusColor.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, statusColor)
+                            ) {
+                                Text(
+                                    text = order.status,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2536,6 +3008,11 @@ private fun SaasStoreSpaceView(
                     }
                 }
             }
+        }
+
+        // 3. Page / Section Historique des Commandes du Magasin de Pièces (filtrée sur activeOrg.organizationId)
+        item {
+            SaasOrganizationOrderHistoryCard(activeOrg = activeOrg)
         }
     }
 }

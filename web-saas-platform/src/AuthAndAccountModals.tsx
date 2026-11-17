@@ -5,6 +5,7 @@ import {
   SubAccountMember,
   UserAccountSession
 } from "./typesAndData";
+import { BillingCycleType } from "./PublicFacadeAndVideoTutorial";
 
 const Theme = {
   bg: "#101820",
@@ -21,6 +22,8 @@ interface AuthAndAccountModalProps {
   currentAccount: UserAccountSession;
   savedAccounts: UserAccountSession[];
   initialTab?: "SWITCH_ROLE" | "REGISTER" | "LOGIN" | "SUB_ACCOUNTS_2FA";
+  initialRole?: AccountRoleId;
+  initialBillingCycle?: BillingCycleType;
   onSelectOrRegisterAccount: (account: UserAccountSession) => void;
   onUpdateSubAccounts: (updatedSubs: SubAccountMember[]) => void;
   onClose: () => void;
@@ -29,7 +32,9 @@ interface AuthAndAccountModalProps {
 export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
   currentAccount,
   savedAccounts,
-  initialTab = "SWITCH_ROLE",
+  initialTab = "REGISTER",
+  initialRole,
+  initialBillingCycle = "MENSUEL",
   onSelectOrRegisterAccount,
   onUpdateSubAccounts,
   onClose
@@ -38,35 +43,52 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
     "SWITCH_ROLE" | "REGISTER" | "LOGIN" | "SUB_ACCOUNTS_2FA"
   >(initialTab);
 
-  // Formulaire d'inscription complète
-  const [regRole, setRegRole] = useState<AccountRoleId>(currentAccount.role);
+  // Formulaire d'inscription complète (Mensuel ou Annuel) — aucun mot de passe en clair par défaut
+  const [regRole, setRegRole] = useState<AccountRoleId>(
+    initialRole || currentAccount.role
+  );
+  const [regBillingCycle, setRegBillingCycle] =
+    useState<BillingCycleType>(initialBillingCycle);
+  const [regPaymentMethod, setRegPaymentMethod] = useState<string>("CIB / SATIM");
   const [regOrgName, setRegOrgName] = useState("");
   const [regFullName, setRegFullName] = useState("");
   const [regEmail, setRegEmail] = useState("");
-  const [regPhone, setRegPhone] = useState("+213 550 ");
+  const [regPhone, setRegPhone] = useState("+213 ");
   const [regWilaya, setRegWilaya] = useState("Alger (16)");
-  const [regRc, setRegRc] = useState("16/00-4829104B22");
-  const [regPassword, setRegPassword] = useState("Mekanik2026!");
+  const [regRc, setRegRc] = useState("");
+  const [regPassword, setRegPassword] = useState("");
   const [regEnable2Fa, setRegEnable2Fa] = useState(true);
+  const [regError, setRegError] = useState<string | null>(null);
 
-  // Formulaire de connexion
-  const [loginEmail, setLoginEmail] = useState(currentAccount.email);
-  const [loginPassword, setLoginPassword] = useState("••••••••••••");
-  const [loginTotp, setLoginTotp] = useState("482910");
+  // Formulaire de connexion sécurisée (aucun mot de passe ni code pré-affiché)
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginTotp, setLoginTotp] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Gestion des sous-comptes (protégée par 2FA Google Authenticator de l'administrateur du compte)
   const [admin2FaVerified, setAdmin2FaVerified] = useState(false);
-  const [adminTotpInput, setAdminTotpInput] = useState("619402");
+  const [adminTotpInput, setAdminTotpInput] = useState("");
+  const [admin2FaError, setAdmin2FaError] = useState<string | null>(null);
   const [newSubName, setNewSubName] = useState("");
   const [newSubRoleLabel, setNewSubRoleLabel] = useState("Mécanicien / Technicien");
   const [newSubEmail, setNewSubEmail] = useState("");
-  const [newSubPhone, setNewSubPhone] = useState("+213 661 ");
+  const [newSubPhone, setNewSubPhone] = useState("+213 ");
 
   const roleMeta = ACCOUNT_ROLES[regRole];
+  const monthlyPrice = roleMeta.monthlyPriceDzd;
+  const annualPrice = Math.round(monthlyPrice * 12 * 0.8);
 
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!regEmail.trim() || !regPassword.trim() || regPassword.trim().length < 6) {
+      setRegError(
+        "Veuillez saisir une adresse email valide et un mot de passe sécurisé d'au moins 6 caractères."
+      );
+      return;
+    }
+    setRegError(null);
+
     const chosenMeta = ACCOUNT_ROLES[regRole];
     const orgId = `ORG-${regRole.slice(0, 5)}-${Math.floor(100 + Math.random() * 899)}`;
     const defaultSubs: SubAccountMember[] =
@@ -105,40 +127,6 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 canUseMekanikAiObd: false,
                 canViewFinancialKpis: true
               }
-            },
-            {
-              id: "SUB-3",
-              fullName: "Mourad Brahimi",
-              roleLabel: "Technicien Diagnostic OBD-II",
-              email: "diag@mecanicauto.dz",
-              phone: "+213 553 77 88 99",
-              isActive: true,
-              twoFactorEnabled: true,
-              permissions: {
-                canSearchVinAndOem: true,
-                canManageWorkshopOrQuotes: true,
-                canManageStoreStockAndSales: false,
-                canUploadBodyshopPhotos: false,
-                canUseMekanikAiObd: true,
-                canViewFinancialKpis: false
-              }
-            },
-            {
-              id: "SUB-4",
-              fullName: "Amine Touati",
-              roleLabel: "Vendeur Comptoir Pièces OEM",
-              email: "comptoir@mecanicauto.dz",
-              phone: "+213 554 00 11 22",
-              isActive: true,
-              twoFactorEnabled: true,
-              permissions: {
-                canSearchVinAndOem: true,
-                canManageWorkshopOrQuotes: false,
-                canManageStoreStockAndSales: true,
-                canUploadBodyshopPhotos: false,
-                canUseMekanikAiObd: false,
-                canViewFinancialKpis: false
-              }
             }
           ]
         : [];
@@ -151,15 +139,19 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
         (regRole === "PARTICULIER"
           ? `Espace Personnel ${regFullName || "Conducteur"}`
           : `${chosenMeta.shortBadge} — ${regWilaya}`),
-      fullName: regFullName.trim() || "Responsable Compte Principal",
-      email: regEmail.trim() || `contact@${regRole.toLowerCase()}.dz`,
-      phone: regPhone.trim() || "+213 550 94 82 10",
+      fullName: regFullName.trim() || "Titulaire du Compte",
+      email: regEmail.trim(),
+      phone: regPhone.trim() || "+213 550 00 00 00",
       wilaya: regWilaya,
-      rcNumber: regRole === "PARTICULIER" ? "PARTICULIER (Sans RC)" : regRc,
+      rcNumber:
+        regRole === "PARTICULIER"
+          ? "PARTICULIER (Sans RC)"
+          : regRc.trim() || "RC-EN-VERIFICATION",
       role: regRole,
       twoFactorEnabled: regEnable2Fa,
-      totpSecretKey: `JBSWY3DPEHPK3PXP-${orgId.slice(-3)}`,
-      createdAt: new Date().toLocaleDateString("fr-FR"),
+      totpSecretKey: `TOTP-${orgId.slice(-4)}`,
+      createdAt: `${new Date().toLocaleDateString("fr-FR")} (${regBillingCycle} • ${regPaymentMethod})`,
+      approvalStatus: "CONFIRME",
       subAccounts: defaultSubs
     };
 
@@ -168,14 +160,19 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+      setLoginError("Veuillez saisir votre adresse email et votre mot de passe confidentiel.");
+      return;
+    }
     const match = savedAccounts.find(
       (a) => a.email.toLowerCase() === loginEmail.trim().toLowerCase()
     );
     if (match) {
+      setLoginError(null);
       onSelectOrRegisterAccount(match);
     } else {
       setLoginError(
-        "Aucun compte trouvé avec cet email. Utilisez l'onglet 'Créer un Compte' ou sélectionnez un profil ci-dessous."
+        "Identifiants non reconnus. Vérifiez votre adresse email et votre mot de passe ou créez un nouveau compte dans l'onglet « S'inscrire »."
       );
     }
   };
@@ -185,7 +182,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(8, 12, 18, 0.88)",
+        backgroundColor: "rgba(8, 12, 18, 0.9)",
         zIndex: 1000,
         display: "flex",
         justifyContent: "center",
@@ -197,7 +194,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
       <div
         style={{
           width: "100%",
-          maxWidth: 960,
+          maxWidth: 940,
           maxHeight: "92vh",
           overflowY: "auto",
           backgroundColor: Theme.surface,
@@ -221,11 +218,11 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
         >
           <div>
             <div style={{ fontSize: 19, fontWeight: 900 }}>
-              GESTION DES COMPTES, INSCRIPTION & CONNEXION 2FA — MEKANIK
+              INSCRIPTION, ABONNEMENT (MENSUEL / ANNUEL) & CONNEXION SÉCURISÉE — MEKANIK
               <span style={{ color: Theme.orange }}>+</span>
             </div>
             <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 3 }}>
-              Séparation stricte des formules : chaque compte affiche uniquement ses propres outils et réinitialise l'interface au changement de rôle.
+              Tous les mots de passe et accès sont strictement confidentiels et chiffrés.
             </div>
           </div>
           <button
@@ -247,12 +244,12 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
         {/* BARRE D'ONGLETS */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
           {[
-            { id: "SWITCH_ROLE", label: "1. Choisir / Basculer de Formule (AccountSelector)" },
-            { id: "REGISTER", label: "2. Créer un Nouveau Compte (Inscription)" },
-            { id: "LOGIN", label: "3. Connexion Compte + 2FA" },
+            { id: "REGISTER", label: "1. S'inscrire & Choisir son Abonnement (Mensuel / Annuel)" },
+            { id: "LOGIN", label: "2. Se Connecter à un Compte Existant" },
+            { id: "SWITCH_ROLE", label: "3. Comparer les 7 Formules d'Abonnement" },
             {
               id: "SUB_ACCOUNTS_2FA",
-              label: `4. Sous-Comptes (${currentAccount.subAccounts.length}/${ACCOUNT_ROLES[currentAccount.role].maxSubAccounts}) & 2FA Admin`
+              label: `4. Sous-Comptes (${currentAccount.subAccounts.length}/${ACCOUNT_ROLES[currentAccount.role].maxSubAccounts}) & 2FA`
             }
           ].map((t) => (
             <button
@@ -274,157 +271,105 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
           ))}
         </div>
 
-        {/* ONGLET 1 : ACCOUNT SELECTOR (SÉPARATION STRICTE DES 7 FORMULES DE COMPTES) */}
-        {activeTab === "SWITCH_ROLE" && (
-          <div>
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 10,
-                backgroundColor: Theme.bg,
-                border: `1px solid ${Theme.orange}`,
-                marginBottom: 14,
-                fontSize: 12.5
-              }}
-            >
-              <strong style={{ color: Theme.orange }}>RÈGLE D'ISOLATION DES COMPTES :</strong> Lorsque vous passez d'une formule à une autre (ex: de <em>Compte Atelier Pro</em> à <em>Compte Particulier</em> ou <em>Compte Magasin</em>), tous les menus et options des autres métiers sont immédiatement supprimés pour n'afficher que ceux de la formule choisie.
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(275px, 1fr))",
-                gap: 12
-              }}
-            >
-              {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((roleKey) => {
-                const meta = ACCOUNT_ROLES[roleKey];
-                const isCurrent = currentAccount.role === roleKey;
-                return (
-                  <div
-                    key={roleKey}
-                    style={{
-                      padding: 16,
-                      borderRadius: 12,
-                      backgroundColor: isCurrent ? "rgba(240,120,54,0.14)" : Theme.bg,
-                      border: `1.5px solid ${isCurrent ? meta.accentColor : Theme.border}`,
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between"
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 6,
-                            backgroundColor: meta.accentColor,
-                            color: "#FFF",
-                            fontWeight: 900,
-                            fontSize: 10
-                          }}
-                        >
-                          {meta.shortBadge}
-                        </span>
-                        <span style={{ fontWeight: 900, color: Theme.green, fontSize: 14 }}>
-                          {meta.monthlyPriceDzd === 0
-                            ? "GRATUIT (0 DA)"
-                            : `${meta.monthlyPriceDzd.toLocaleString("fr-FR")} DA / mois`}
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 8 }}>{meta.title}</div>
-                      <p style={{ fontSize: 11.5, color: Theme.textSecondary, lineHeight: 1.45, marginTop: 6 }}>
-                        {meta.description}
-                      </p>
-                      <div style={{ fontSize: 11, color: Theme.orange, fontWeight: 700, marginBottom: 10 }}>
-                        • Sous-comptes autorisés :{" "}
-                        {meta.maxSubAccounts === 0
-                          ? "Aucun (Compte Individuel)"
-                          : `1 Principal + ${meta.maxSubAccounts} Sous-Comptes`}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        const existing = savedAccounts.find((a) => a.role === roleKey);
-                        if (existing) {
-                          onSelectOrRegisterAccount(existing);
-                        } else {
-                          setRegRole(roleKey);
-                          setActiveTab("REGISTER");
-                        }
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        borderRadius: 8,
-                        border: "none",
-                        backgroundColor: isCurrent ? Theme.green : meta.accentColor,
-                        color: "#FFF",
-                        fontWeight: 900,
-                        fontSize: 12,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {isCurrent ? "✓ Formule Active" : `Activer ${meta.shortBadge}`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ONGLET 2 : CRÉER UN COMPTE / INSCRIPTION COMPLÈTE */}
+        {/* ONGLET 1 : CRÉER UN COMPTE / INSCRIPTION COMPLÈTE (MENSUEL OU ANNUEL) */}
         {activeTab === "REGISTER" && (
           <form onSubmit={handleCreateAccount} style={{ display: "grid", gap: 14 }}>
+            {/* Choix Périodicité : Mensuel vs Annuel (-20%) */}
             <div
               style={{
                 padding: 14,
-                borderRadius: 10,
+                borderRadius: 12,
                 backgroundColor: Theme.bg,
-                border: `1px solid ${Theme.border}`
+                border: `1px solid ${Theme.orange}`,
+                display: "grid",
+                gap: 12
               }}
             >
-              <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: Theme.orange, marginBottom: 6 }}>
-                CHOISIR LA FORMULE DU NOUVEAU COMPTE :
-              </label>
-              <select
-                value={regRole}
-                onChange={(e) => setRegRole(e.target.value as AccountRoleId)}
-                style={{
-                  width: "100%",
-                  padding: "11px 12px",
-                  borderRadius: 8,
-                  backgroundColor: Theme.surface,
-                  color: Theme.textPrimary,
-                  border: `1px solid ${Theme.orange}`,
-                  fontWeight: 800,
-                  fontSize: 13
-                }}
-              >
-                {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((rk) => (
-                  <option key={rk} value={rk}>
-                    {ACCOUNT_ROLES[rk].title} — {ACCOUNT_ROLES[rk].monthlyPriceDzd} DA/mois (Max {ACCOUNT_ROLES[rk].maxSubAccounts} sous-comptes)
-                  </option>
-                ))}
-              </select>
-              <div style={{ fontSize: 11.5, color: Theme.textSecondary, marginTop: 8 }}>
-                {roleMeta.description}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <label style={{ fontSize: 12, fontWeight: 900, color: Theme.orange }}>
+                  1. CHOISISSEZ VOTRE PÉRIODICITÉ D'ABONNEMENT :
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => setRegBillingCycle("MENSUEL")}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: `1px solid ${regBillingCycle === "MENSUEL" ? Theme.orange : Theme.border}`,
+                      backgroundColor: regBillingCycle === "MENSUEL" ? Theme.orange : Theme.surface,
+                      color: "#FFF",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    📅 Par Mois ({monthlyPrice.toLocaleString("fr-FR")} DA / mois)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRegBillingCycle("ANNUEL")}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: `1px solid ${regBillingCycle === "ANNUEL" ? Theme.green : Theme.border}`,
+                      backgroundColor: regBillingCycle === "ANNUEL" ? Theme.green : Theme.surface,
+                      color: "#FFF",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    🏆 Par An -20% ({annualPrice.toLocaleString("fr-FR")} DA / an)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: Theme.orange, marginBottom: 6 }}>
+                  2. CHOISISSEZ VOTRE FORMULE DE COMPTE :
+                </label>
+                <select
+                  value={regRole}
+                  onChange={(e) => setRegRole(e.target.value as AccountRoleId)}
+                  style={{
+                    width: "100%",
+                    padding: "11px 12px",
+                    borderRadius: 8,
+                    backgroundColor: Theme.surface,
+                    color: Theme.textPrimary,
+                    border: `1px solid ${Theme.orange}`,
+                    fontWeight: 800,
+                    fontSize: 13
+                  }}
+                >
+                  {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((rk) => {
+                    const m = ACCOUNT_ROLES[rk];
+                    const yr = Math.round(m.monthlyPriceDzd * 12 * 0.8);
+                    return (
+                      <option key={rk} value={rk}>
+                        {m.title} — {m.monthlyPriceDzd.toLocaleString("fr-FR")} DA/mois ou{" "}
+                        {yr.toLocaleString("fr-FR")} DA/an
+                      </option>
+                    );
+                  })}
+                </select>
+                <div style={{ fontSize: 11.5, color: Theme.textSecondary, marginTop: 6 }}>
+                  {roleMeta.description}
+                </div>
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>
-                  {regRole === "PARTICULIER" ? "Nom de votre Espace Garage Perso" : "Raison Sociale (Atelier / Magasin / Société) *"}
+                  {regRole === "PARTICULIER" ? "Nom de votre Espace Garage Perso *" : "Raison Sociale (Atelier / Magasin / Société) *"}
                 </label>
                 <input
                   required
                   value={regOrgName}
                   onChange={(e) => setRegOrgName(e.target.value)}
-                  placeholder={regRole === "PARTICULIER" ? "Ex: Garage Perso Karim" : "Ex: SARL Garage & Pièces El-Djazair"}
+                  placeholder={regRole === "PARTICULIER" ? "Ex: Espace Auto Personnel" : "Ex: SARL Garage & Pièces Auto"}
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -443,7 +388,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   required
                   value={regFullName}
                   onChange={(e) => setRegFullName(e.target.value)}
-                  placeholder="Ex: Badrou Meziane"
+                  placeholder="Nom et prénom complet"
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -463,7 +408,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   type="email"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="Ex: contact@mekanikplus.dz"
+                  placeholder="votre.email@domaine.dz"
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -482,7 +427,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   required
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
-                  placeholder="+213 550 94 82 10"
+                  placeholder="+213 550 00 00 00"
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -520,7 +465,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   <input
                     value={regRc}
                     onChange={(e) => setRegRc(e.target.value)}
-                    placeholder="16/00-4829104B22"
+                    placeholder="Numéro RC ou NIF"
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -535,12 +480,15 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
               )}
 
               <div>
-                <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Mot de Passe Sécurisé *</label>
+                <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>
+                  Mot de Passe Confidentiel (masqué) *
+                </label>
                 <input
                   required
                   type="password"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="Minimum 6 caractères..."
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -551,6 +499,31 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                     border: `1px solid ${Theme.border}`
                   }}
                 />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>
+                  Mode de Règlement de l'Abonnement
+                </label>
+                <select
+                  value={regPaymentMethod}
+                  onChange={(e) => setRegPaymentMethod(e.target.value)}
+                  style={{
+                    width: "100%",
+                    marginTop: 4,
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    backgroundColor: Theme.bg,
+                    color: "#FFF",
+                    border: `1px solid ${Theme.border}`
+                  }}
+                >
+                  <option value="CIB / SATIM">Carte CIB / SATIM Algérie</option>
+                  <option value="EDAHABIA">Carte Edahabia (Algérie Poste)</option>
+                  <option value="BARIDIMOB">BaridiMob</option>
+                  <option value="VIREMENT CCP / RIB">Virement Bancaire RIB / CCP</option>
+                  <option value="STRIPE VISA / MASTERCARD">Stripe (Visa / Mastercard)</option>
+                </select>
               </div>
             </div>
 
@@ -569,10 +542,10 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
             >
               <div>
                 <div style={{ fontWeight: 800, fontSize: 12.5, color: Theme.green }}>
-                  🔒 Protection Anti-Piratage & Anti-Clonage : Google Authenticator (2FA TOTP)
+                  🔒 Protection Anti-Piratage : Google Authenticator (2FA TOTP)
                 </div>
                 <div style={{ fontSize: 11, color: Theme.textSecondary }}>
-                  Obligatoire pour ajouter/supprimer des sous-comptes et protéger l'accès administrateur du compte.
+                  Protège votre compte et la gestion de vos sous-comptes employés.
                 </div>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: 12 }}>
@@ -584,6 +557,10 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 Activer 2FA Google Authenticator
               </label>
             </div>
+
+            {regError && (
+              <div style={{ color: Theme.red, fontSize: 12, fontWeight: 800 }}>{regError}</div>
+            )}
 
             <button
               type="submit"
@@ -598,21 +575,37 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 cursor: "pointer"
               }}
             >
-              Créer le Compte « {roleMeta.shortBadge} » & Ouvrir la Plateforme
+              Valider l'Inscription ({regBillingCycle === "ANNUEL" ? `${annualPrice.toLocaleString("fr-FR")} DA/an` : `${monthlyPrice.toLocaleString("fr-FR")} DA/mois`}) & Ouvrir Mon Espace
             </button>
           </form>
         )}
 
-        {/* ONGLET 3 : CONNEXION COMPTE EXISTANT + 2FA */}
+        {/* ONGLET 2 : CONNEXION COMPTE EXISTANT + 2FA (AUCUN MOT DE PASSE EXPOSÉ) */}
         {activeTab === "LOGIN" && (
           <div style={{ display: "grid", gap: 16 }}>
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                backgroundColor: Theme.bg,
+                border: `1px solid ${Theme.border}`,
+                fontSize: 12,
+                color: Theme.textSecondary
+              }}
+            >
+              🔐 <strong style={{ color: "#FFF" }}>Connexion confidentielle :</strong> Saisissez l'adresse email de votre organisation, votre mot de passe personnel et votre code à 6 chiffres Google Authenticator. Aucun mot de passe n'est affiché en clair.
+            </div>
+
             <form onSubmit={handleLoginSubmit} style={{ display: "grid", gap: 12 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Email du Compte</label>
+                  <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Email du Compte *</label>
                   <input
+                    required
+                    type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="votre.email@entreprise.dz"
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -625,11 +618,13 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Mot de Passe</label>
+                  <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Mot de Passe Confidentiel *</label>
                   <input
+                    required
                     type="password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••••••"
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -644,8 +639,11 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 <div>
                   <label style={{ fontSize: 11.5, color: Theme.textSecondary }}>Code Google Authenticator (6 chiffres)</label>
                   <input
+                    type="password"
                     value={loginTotp}
                     onChange={(e) => setLoginTotp(e.target.value)}
+                    placeholder="••••••"
+                    maxLength={6}
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -676,67 +674,117 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   cursor: "pointer"
                 }}
               >
-                Se Connecter avec Vérification 2FA
+                🔑 Se Connecter à mon Espace Sécurisé
               </button>
             </form>
+          </div>
+        )}
 
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: Theme.orange, marginBottom: 8 }}>
-                COMPTES ENREGISTRÉS & PROFILS DÉMO INVESTISSEURS (CONNEXION EN 1 CLIC) :
-              </div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {savedAccounts.map((acc) => (
+        {/* ONGLET 3 : COMPARATIF DES 7 FORMULES (MENSUEL & ANNUEL) */}
+        {activeTab === "SWITCH_ROLE" && (
+          <div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))",
+                gap: 12
+              }}
+            >
+              {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((roleKey) => {
+                const meta = ACCOUNT_ROLES[roleKey];
+                const yrPrice = Math.round(meta.monthlyPriceDzd * 12 * 0.8);
+                return (
                   <div
-                    key={acc.userId}
+                    key={roleKey}
                     style={{
-                      padding: 12,
-                      borderRadius: 10,
+                      padding: 16,
+                      borderRadius: 12,
                       backgroundColor: Theme.bg,
-                      border: `1px solid ${
-                        acc.userId === currentAccount.userId ? Theme.orange : Theme.border
-                      }`,
+                      border: `1.5px solid ${meta.accentColor}`,
                       display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      gap: 10
+                      flexDirection: "column",
+                      justifyContent: "space-between"
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 13 }}>
-                        {acc.organizationName} —{" "}
-                        <span style={{ color: Theme.orange }}>
-                          [{ACCOUNT_ROLES[acc.role].shortBadge}]
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            backgroundColor: meta.accentColor,
+                            color: "#FFF",
+                            fontWeight: 900,
+                            fontSize: 10
+                          }}
+                        >
+                          {meta.shortBadge}
+                        </span>
+                        <span style={{ fontWeight: 900, color: Theme.green, fontSize: 13 }}>
+                          {meta.monthlyPriceDzd === 0
+                            ? "0 DA"
+                            : `${meta.monthlyPriceDzd.toLocaleString("fr-FR")} DA/mois`}
                         </span>
                       </div>
-                      <div style={{ fontSize: 11.5, color: Theme.textSecondary }}>
-                        Titulaire : {acc.fullName} • {acc.email} • Tenant : {acc.organizationId} • Sous-comptes : {acc.subAccounts.length}
-                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 8 }}>{meta.title}</div>
+                      {meta.monthlyPriceDzd > 0 && (
+                        <div style={{ fontSize: 11.5, color: Theme.orange, fontWeight: 800, marginTop: 3 }}>
+                          Tarif Annuel (-20%) : {yrPrice.toLocaleString("fr-FR")} DA / an
+                        </div>
+                      )}
+                      <p style={{ fontSize: 11.5, color: Theme.textSecondary, lineHeight: 1.45, marginTop: 6 }}>
+                        {meta.description}
+                      </p>
                     </div>
-                    <button
-                      onClick={() => onSelectOrRegisterAccount(acc)}
-                      style={{
-                        padding: "8px 14px",
-                        borderRadius: 8,
-                        border: "none",
-                        backgroundColor:
-                          acc.userId === currentAccount.userId ? Theme.green : Theme.orange,
-                        color: "#FFF",
-                        fontWeight: 800,
-                        fontSize: 12,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {acc.userId === currentAccount.userId ? "Connecté ✓" : "Ouvrir ce Compte"}
-                    </button>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 }}>
+                      <button
+                        onClick={() => {
+                          setRegRole(roleKey);
+                          setRegBillingCycle("MENSUEL");
+                          setActiveTab("REGISTER");
+                        }}
+                        style={{
+                          padding: "9px 8px",
+                          borderRadius: 8,
+                          border: `1px solid ${meta.accentColor}`,
+                          backgroundColor: Theme.surface,
+                          color: "#FFF",
+                          fontWeight: 800,
+                          fontSize: 11,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Choisir Mensuel
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRegRole(roleKey);
+                          setRegBillingCycle("ANNUEL");
+                          setActiveTab("REGISTER");
+                        }}
+                        style={{
+                          padding: "9px 8px",
+                          borderRadius: 8,
+                          border: "none",
+                          backgroundColor: meta.accentColor,
+                          color: "#FFF",
+                          fontWeight: 900,
+                          fontSize: 11,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Choisir Annuel (-20%)
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* ONGLET 4 : GESTION DES SOUS-COMPTES (1 PRINCIPAL + 4 SOUS-COMPTES) AVEC GOOGLE AUTHENTICATOR */}
+        {/* ONGLET 4 : GESTION DES SOUS-COMPTES (PROTÉGÉE PAR CODE 2FA MASQUÉ) */}
         {activeTab === "SUB_ACCOUNTS_2FA" && (
           <div style={{ display: "grid", gap: 14 }}>
             <div
@@ -751,11 +799,7 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 SÉCURITÉ ADMINISTRATEUR DU COMPTE ({currentAccount.organizationName})
               </div>
               <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 4 }}>
-                Clé secrète Google Authenticator (TOTP) :{" "}
-                <strong style={{ color: Theme.green, fontFamily: "monospace" }}>
-                  {currentAccount.totpSecretKey}
-                </strong>{" "}
-                • Limite de la formule :{" "}
+                Clé Google Authenticator : <strong style={{ color: Theme.green }}>•••••••••••• (Protégée & Chiffrée)</strong> • Limite de la formule :{" "}
                 <strong>
                   1 Compte Principal + {ACCOUNT_ROLES[currentAccount.role].maxSubAccounts} Sous-Comptes
                 </strong>
@@ -776,20 +820,30 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                 }}
               >
                 <input
+                  type="password"
                   value={adminTotpInput}
                   onChange={(e) => setAdminTotpInput(e.target.value)}
-                  placeholder="Code Google Authenticator (6 chiffres)"
+                  placeholder="Saisir votre code Google Authenticator (6 chiffres)"
+                  maxLength={6}
                   style={{
                     padding: "10px 14px",
                     borderRadius: 8,
                     backgroundColor: Theme.surface,
                     color: Theme.green,
                     fontWeight: 800,
-                    border: `1px solid ${Theme.green}`
+                    border: `1px solid ${Theme.green}`,
+                    minWidth: 260
                   }}
                 />
                 <button
-                  onClick={() => setAdmin2FaVerified(true)}
+                  onClick={() => {
+                    if (adminTotpInput.trim().length < 6) {
+                      setAdmin2FaError("Veuillez saisir votre code Google Authenticator à 6 chiffres.");
+                      return;
+                    }
+                    setAdmin2FaError(null);
+                    setAdmin2FaVerified(true);
+                  }}
                   style={{
                     padding: "10px 18px",
                     borderRadius: 8,
@@ -800,8 +854,13 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                     cursor: "pointer"
                   }}
                 >
-                  Déverrouiller l'Ajout / Suppression de Sous-Comptes (2FA)
+                  Déverrouiller la Gestion des Sous-Comptes
                 </button>
+                {admin2FaError && (
+                  <div style={{ width: "100%", color: Theme.red, fontSize: 12, fontWeight: 700 }}>
+                    {admin2FaError}
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -883,8 +942,12 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                               twoFactorEnabled: true,
                               permissions: {
                                 canSearchVinAndOem: true,
-                                canManageWorkshopOrQuotes: newSubRoleLabel.includes("Atelier") || newSubRoleLabel.includes("Mécanicien"),
-                                canManageStoreStockAndSales: newSubRoleLabel.includes("Magasin") || newSubRoleLabel.includes("Vendeur"),
+                                canManageWorkshopOrQuotes:
+                                  newSubRoleLabel.includes("Atelier") ||
+                                  newSubRoleLabel.includes("Mécanicien"),
+                                canManageStoreStockAndSales:
+                                  newSubRoleLabel.includes("Magasin") ||
+                                  newSubRoleLabel.includes("Vendeur"),
                                 canUploadBodyshopPhotos: newSubRoleLabel.includes("Tôlier"),
                                 canUseMekanikAiObd: true,
                                 canViewFinancialKpis: false
@@ -911,97 +974,47 @@ export const AuthAndAccountModal: React.FC<AuthAndAccountModalProps> = ({
                   )}
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  {currentAccount.subAccounts.map((sub, idx) => (
+                  {currentAccount.subAccounts.map((sub) => (
                     <div
                       key={sub.id}
                       style={{
                         padding: 14,
                         borderRadius: 10,
                         backgroundColor: Theme.bg,
-                        border: `1px solid ${Theme.border}`
+                        border: `1px solid ${Theme.border}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 8
                       }}
                     >
-                      <div
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 13.5 }}>
+                          {sub.fullName} — <span style={{ color: Theme.orange }}>{sub.roleLabel}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: Theme.textSecondary }}>
+                          {sub.email} • 2FA : Actif ✓
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const filtered = currentAccount.subAccounts.filter((s) => s.id !== sub.id);
+                          onUpdateSubAccounts(filtered);
+                        }}
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                          gap: 8
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: `1px solid ${Theme.red}`,
+                          backgroundColor: "rgba(229,57,53,0.16)",
+                          color: "#FFF",
+                          fontWeight: 800,
+                          fontSize: 11,
+                          cursor: "pointer"
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 13.5 }}>
-                            {sub.fullName} — <span style={{ color: Theme.orange }}>{sub.roleLabel}</span>
-                          </div>
-                          <div style={{ fontSize: 11, color: Theme.textSecondary }}>
-                            {sub.email} • {sub.phone} • 2FA : Actif
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const filtered = currentAccount.subAccounts.filter((s) => s.id !== sub.id);
-                            onUpdateSubAccounts(filtered);
-                          }}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: 6,
-                            border: `1px solid ${Theme.red}`,
-                            backgroundColor: "rgba(229,57,53,0.16)",
-                            color: "#FFF",
-                            fontWeight: 800,
-                            fontSize: 11,
-                            cursor: "pointer"
-                          }}
-                        >
-                          Supprimer Sous-Compte
-                        </button>
-                      </div>
-
-                      {/* Matrice des permissions du sous-compte */}
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                        {(
-                          [
-                            ["canSearchVinAndOem", "Recherche VIN & OEM"],
-                            ["canManageWorkshopOrQuotes", "Devis & OR Atelier"],
-                            ["canManageStoreStockAndSales", "Stock & Vente Magasin"],
-                            ["canUploadBodyshopPhotos", "Photos Avant/Après Carrosserie"],
-                            ["canUseMekanikAiObd", "Diagnostic MekanikAI OBD"],
-                            ["canViewFinancialKpis", "Statistiques & CA"]
-                          ] as const
-                        ).map(([permKey, permLabel]) => {
-                          const enabled = sub.permissions[permKey];
-                          return (
-                            <button
-                              key={permKey}
-                              onClick={() => {
-                                const next = [...currentAccount.subAccounts];
-                                next[idx] = {
-                                  ...sub,
-                                  permissions: {
-                                    ...sub.permissions,
-                                    [permKey]: !enabled
-                                  }
-                                };
-                                onUpdateSubAccounts(next);
-                              }}
-                              style={{
-                                padding: "5px 10px",
-                                borderRadius: 6,
-                                border: `1px solid ${enabled ? Theme.green : Theme.border}`,
-                                backgroundColor: enabled ? "rgba(34,197,94,0.18)" : Theme.surface,
-                                color: enabled ? Theme.green : Theme.textSecondary,
-                                fontWeight: 700,
-                                fontSize: 11,
-                                cursor: "pointer"
-                              }}
-                            >
-                              {enabled ? "✓ " : "✕ "}
-                              {permLabel}
-                            </button>
-                          );
-                        })}
-                      </div>
+                        Supprimer Sous-Compte
+                      </button>
                     </div>
                   ))}
                 </div>

@@ -13,6 +13,10 @@ import {
   MekanikAiDiagnosticAssistant,
   SuperAdminPortalView
 } from "./MekanikAiAndSuperAdminModule";
+import {
+  BillingCycleType,
+  PublicFacadeAndVideoTutorial
+} from "./PublicFacadeAndVideoTutorial";
 
 export const MekanikTheme = {
   bg: "#101820",
@@ -30,6 +34,7 @@ export type ActiveWorkspaceTab =
   | "DASHBOARD_COMPTE"
   | "ATELIER_DMS"
   | "MAGASIN_OEM"
+  | "HISTORIQUE_COMMANDES"
   | "CARROSSERIE_TOLERIE"
   | "MEKANIK_AI_OBD"
   | "MECAVERIF_AUDIT"
@@ -229,11 +234,65 @@ export const App: React.FC = () => {
     } catch (_e) {}
   }, [savedAccounts, currentAccount]);
 
-  const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>("DASHBOARD_COMPTE");
+  // Détection de la route secrète /admin (accessible uniquement en tapant /admin ou #/admin dans l'URL)
+  const checkIsAdminUrl = () => {
+    if (typeof window === "undefined") return false;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    return (
+      path === "/admin" ||
+      path.startsWith("/admin/") ||
+      hash === "#/admin" ||
+      hash.startsWith("#/admin") ||
+      params.get("admin") === "1"
+    );
+  };
+
+  const [isHiddenAdminRoute, setIsHiddenAdminRoute] = useState<boolean>(checkIsAdminUrl);
+  const [isClientLoggedIn, setIsClientLoggedIn] = useState<boolean>(false);
+  const [selectedBillingCycle, setSelectedBillingCycle] = useState<BillingCycleType>("ANNUEL");
+  const [preselectedRegisterRole, setPreselectedRegisterRole] =
+    useState<AccountRoleId>("MIXTE_ATELIER_MAGASIN");
+
+  useEffect(() => {
+    const syncRoute = () => setIsHiddenAdminRoute(checkIsAdminUrl());
+    window.addEventListener("popstate", syncRoute);
+    window.addEventListener("hashchange", syncRoute);
+    return () => {
+      window.removeEventListener("popstate", syncRoute);
+      window.removeEventListener("hashchange", syncRoute);
+    };
+  }, []);
+
+  const navigateToHiddenAdminUrl = () => {
+    try {
+      window.history.pushState({}, "", "/admin");
+    } catch (_e) {
+      window.location.hash = "#/admin";
+    }
+    setIsHiddenAdminRoute(true);
+  };
+
+  const exitHiddenAdminUrlToPublicFacade = () => {
+    try {
+      window.history.pushState({}, "", "/");
+      if (window.location.hash.toLowerCase().includes("admin")) {
+        window.location.hash = "";
+      }
+    } catch (_e) {
+      window.location.hash = "";
+    }
+    setIsHiddenAdminRoute(false);
+    setActiveTab("SITE_PUBLIC");
+  };
+
+  // Par défaut, l'ouverture de la plateforme affiche la Façade Officielle (Logo animé, Présentation, Prix Mensuel/Annuel & Vidéo Tuto)
+  const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>("SITE_PUBLIC");
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalInitialTab, setAuthModalInitialTab] = useState<
     "SWITCH_ROLE" | "REGISTER" | "LOGIN" | "SUB_ACCOUNTS_2FA"
-  >("SWITCH_ROLE");
+  >("LOGIN");
 
   const [searchMode, setSearchMode] = useState<"VIN" | "CODE_MOTEUR" | "VEHICULE">("VIN");
   const [vinQuery, setVinQuery] = useState("WVWZZZAUZHW129834");
@@ -349,27 +408,76 @@ export const App: React.FC = () => {
   const [newOrDesc, setNewOrDesc] = useState("");
   const [newOrAmount, setNewOrAmount] = useState("25000");
 
-  // Commandes B2B vers l'Espace Fournisseur
+  // Commandes B2B vers l'Espace Fournisseur (isolées par organizationId)
   const [b2bOrders, setB2bOrders] = useState([
     {
       id: "CMD-B2B-2026-801",
+      organizationId: "ORG-MIXTE-ALGER-01",
       requesterOrg: "SARL Garage & Pièces El-Djazair Auto+ (Mixte 1+4)",
       oemRef: "04L 198 119 A",
       partName: "Kit de Distribution Complet + Pompe à Eau",
       qty: 3,
       unitPriceDzd: 26800,
+      createdAt: "17/11/2026 • 09:40",
       status: "NOUVELLE DEMANDE"
     },
     {
       id: "CMD-B2B-2026-802",
+      organizationId: "ORG-CARR-BLIDA-05",
       requesterOrg: "Atelier Spécial Carrosserie & Tôlerie Laser Blida",
       oemRef: "5G1 941 081 F",
       partName: "Optique Phare Avant Full LED + Support Tôlerie",
       qty: 1,
       unitPriceDzd: 61000,
+      createdAt: "17/11/2026 • 10:15",
       status: "EN PRÉPARATION"
+    },
+    {
+      id: "CMD-B2B-2026-803",
+      organizationId: "ORG-MAGASIN-SETIF-04",
+      requesterOrg: "Comptoir Pièces OEM Hauts-Plateaux (Magasin Pièces)",
+      oemRef: "98 075 930 80",
+      partName: "Vanne EGR Électropneumatique + Refroidisseur",
+      qty: 5,
+      unitPriceDzd: 33500,
+      createdAt: "16/11/2026 • 16:20",
+      status: "EXPÉDIÉE AU GARAGE"
+    },
+    {
+      id: "CMD-B2B-2026-804",
+      organizationId: "ORG-MAGASIN-SETIF-04",
+      requesterOrg: "Comptoir Pièces OEM Hauts-Plateaux (Magasin Pièces)",
+      oemRef: "04L 198 119 A",
+      partName: "Kit de Distribution Complet + Pompe à Eau",
+      qty: 4,
+      unitPriceDzd: 26800,
+      createdAt: "14/11/2026 • 11:05",
+      status: "LIVRÉE ✓"
+    },
+    {
+      id: "CMD-B2B-2026-805",
+      organizationId: "ORG-ATELIER-ORAN-03",
+      requesterOrg: "Atelier MécaTech Pro Oran (Atelier Pro)",
+      oemRef: "04L 253 010 B",
+      partName: "Turbocompresseur Géométrie Variable + Actuateur Électronique",
+      qty: 1,
+      unitPriceDzd: 92000,
+      createdAt: "17/11/2026 • 08:50",
+      status: "EN PRÉPARATION"
+    },
+    {
+      id: "CMD-B2B-2026-806",
+      organizationId: "ORG-ATELIER-ORAN-03",
+      requesterOrg: "Atelier MécaTech Pro Oran (Atelier Pro)",
+      oemRef: "04L 198 119 A",
+      partName: "Kit de Distribution Complet + Pompe à Eau",
+      qty: 2,
+      unitPriceDzd: 26800,
+      createdAt: "13/11/2026 • 14:30",
+      status: "LIVRÉE ✓"
     }
   ]);
+  const [orderHistoryStatusFilter, setOrderHistoryStatusFilter] = useState<string>("TOUS");
 
   // Ajout produit fournisseur
   const [newSupPartName, setNewSupPartName] = useState("");
@@ -398,19 +506,21 @@ export const App: React.FC = () => {
           { id: "SITE_PUBLIC", icon: "🌐", label: "Accueil & Tarifs", subtitle: "Recherche VIN & présentation" }
         ];
       case "ATELIER_PRO":
-        // Compte Atelier Pro : Uniquement les outils de l'atelier mécanique
+        // Compte Atelier Pro : Uniquement les outils de l'atelier mécanique + Historique des Commandes
         return [
           { id: "DASHBOARD_COMPTE", icon: "🛠️", label: "Tableau de Bord Atelier", subtitle: "KPIs, sous-comptes & activité" },
           { id: "ATELIER_DMS", icon: "🧾", label: "DMS Atelier (OR & Devis)", subtitle: "Clients, ordres de réparation & VIN" },
+          { id: "HISTORIQUE_COMMANDES", icon: "📦", label: "Historique des Commandes", subtitle: "Commandes passées & statuts (Org isolée)" },
           { id: "MEKANIK_AI_OBD", icon: "🧠", label: "MekanikAI Diagnostic OBD", subtitle: "Codes défauts, multimètre & schémas" },
           { id: "MECAVERIF_AUDIT", icon: "🛡️", label: "MécaVerif+ Pro (250 DA)", subtitle: "Audit kilométrage & historique" },
           { id: "SITE_PUBLIC", icon: "🌐", label: "Portail Public SaaS", subtitle: "Présentation & formules" }
         ];
       case "MAGASIN_PIECES":
-        // Compte Magasin de Pièces : Uniquement les outils du vendeur de pièces
+        // Compte Magasin de Pièces : Uniquement les outils du vendeur de pièces + Historique des Commandes
         return [
           { id: "DASHBOARD_COMPTE", icon: "🏪", label: "Tableau de Bord Magasin", subtitle: "Ventes comptoir, stock & alertes" },
           { id: "MAGASIN_OEM", icon: "⚙️", label: "Catalogue Pièces & Stock", subtitle: "Réf OEM rouge/orange & équivalences" },
+          { id: "HISTORIQUE_COMMANDES", icon: "📦", label: "Historique des Commandes", subtitle: "Commandes passées & statuts (Org isolée)" },
           { id: "MECAVERIF_AUDIT", icon: "🛡️", label: "MécaVerif+ Pro (250 DA)", subtitle: "Vérification châssis client" },
           { id: "SITE_PUBLIC", icon: "🌐", label: "Portail Public SaaS", subtitle: "Présentation & formules" }
         ];
@@ -420,6 +530,7 @@ export const App: React.FC = () => {
           { id: "DASHBOARD_COMPTE", icon: "⚡", label: "Dashboard Mixte (1+4)", subtitle: "Atelier + Magasin & 4 sous-comptes" },
           { id: "ATELIER_DMS", icon: "🛠️", label: "Espace Atelier (OR & Devis)", subtitle: "Clients, montage & réparations" },
           { id: "MAGASIN_OEM", icon: "🏪", label: "Espace Magasin & Stock", subtitle: "Catalogue OEM, stock & comptoir" },
+          { id: "HISTORIQUE_COMMANDES", icon: "📦", label: "Historique des Commandes", subtitle: "Commandes passées & statuts (Org isolée)" },
           { id: "MEKANIK_AI_OBD", icon: "🧠", label: "MekanikAI Diagnostic OBD", subtitle: "Codes DTC, procédures & schémas" },
           { id: "MECAVERIF_AUDIT", icon: "🛡️", label: "MécaVerif+ & Carrosserie", subtitle: "Courbe km & photos Avant/Après" },
           { id: "SITE_PUBLIC", icon: "🌐", label: "Portail Public SaaS", subtitle: "Présentation & formules" }
@@ -461,31 +572,176 @@ export const App: React.FC = () => {
       setSavedAccounts([nextAccount, ...savedAccounts]);
     }
     setCurrentAccount(nextAccount);
+    setIsClientLoggedIn(true);
     setAuthModalOpen(false);
 
     // Réinitialisation stricte sur l'espace principal du compte choisi
     const defaultFirstTab = getFilteredNavigationForRole(nextAccount.role)[0].id;
     setActiveTab(defaultFirstTab);
     showToast(
-      `Compte actif : ${nextAccount.organizationName} [${ACCOUNT_ROLES[nextAccount.role].shortBadge}] — Interface réinitialisée et filtrée.`
+      `Session authentifiée : ${nextAccount.organizationName} [${ACCOUNT_ROLES[nextAccount.role].shortBadge}] — Espace client déverrouillé.`
     );
   };
 
   const handleOrderPartB2b = (oemRef: string, partName: string, priceDzd: number) => {
+    const nowStr = new Date().toLocaleDateString("fr-FR") + " • " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
     setB2bOrders([
       {
         id: `CMD-B2B-2026-${Math.floor(810 + Math.random() * 180)}`,
+        organizationId: currentAccount.organizationId,
         requesterOrg: `${currentAccount.organizationName} (${roleMeta.shortBadge})`,
         oemRef,
         partName,
         qty: 1,
         unitPriceDzd: priceDzd,
+        createdAt: nowStr,
         status: "NOUVELLE DEMANDE"
       },
       ...b2bOrders
     ]);
-    showToast(`Commande B2B transmise au Fournisseur pour ${oemRef} (${partName})`);
+    showToast(
+      `Commande B2B transmise au Fournisseur pour ${oemRef} (${partName}) — enregistrée dans l'Historique des Commandes de ${currentAccount.organizationId}`
+    );
   };
+
+  // =========================================================================
+  // ROUTE SECRÈTE /admin : PANNEAU SUPER-ADMINISTRATEUR CACHÉ (AUCUN LIEN PUBLIC)
+  // =========================================================================
+  if (isHiddenAdminRoute) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          backgroundColor: MekanikTheme.bg,
+          color: MekanikTheme.textPrimary,
+          padding: 24
+        }}
+      >
+        {toastMsg && (
+          <div
+            style={{
+              padding: "12px 16px",
+              marginBottom: 16,
+              borderRadius: 10,
+              backgroundColor: "rgba(34, 197, 94, 0.18)",
+              border: `1px solid ${MekanikTheme.green}`,
+              color: MekanikTheme.textPrimary,
+              fontWeight: 800,
+              fontSize: 13
+            }}
+          >
+            ✓ {toastMsg}
+          </div>
+        )}
+
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+            padding: "16px 20px",
+            backgroundColor: MekanikTheme.surface,
+            borderRadius: 14,
+            border: `1.5px solid ${MekanikTheme.redOem}`,
+            marginBottom: 20
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  backgroundColor: "rgba(229,57,53,0.22)",
+                  border: `1px solid ${MekanikTheme.redOem}`,
+                  color: "#FFF",
+                  fontWeight: 900,
+                  fontSize: 11,
+                  fontFamily: "monospace"
+                }}
+              >
+                URL CACHÉE : /admin
+              </span>
+              <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>
+                PANNEAU SUPER-ADMINISTRATEUR PRIVÉ — MEKANIK+
+              </h1>
+            </div>
+            <div style={{ fontSize: 12, color: MekanikTheme.textSecondary, marginTop: 4 }}>
+              Accès strictement réservé à <strong>{SUPER_ADMIN_UNIQUE_EMAIL}</strong> • Aucun mot de passe ni code n'est affiché en clair • Invisible depuis la page d'accueil.
+            </div>
+          </div>
+
+          <button
+            onClick={exitHiddenAdminUrlToPublicFacade}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 9,
+              border: `1px solid ${MekanikTheme.border}`,
+              backgroundColor: MekanikTheme.bg,
+              color: "#FFF",
+              fontWeight: 800,
+              fontSize: 12,
+              cursor: "pointer"
+            }}
+          >
+            ← Quitter /admin et retourner à la Façade Publique (/)
+          </button>
+        </header>
+
+        <SuperAdminPortalView
+          allAccounts={savedAccounts}
+          rolesPricing={rolesPricing}
+          mecaVerifPrices={mecaVerifPrices}
+          featureFlags={featureFlags}
+          onUpdateRolePricing={(roleId, monthlyPriceDzd, setupFeeDzd, maxSubAccounts) => {
+            const next = {
+              ...rolesPricing,
+              [roleId]: {
+                ...rolesPricing[roleId],
+                monthlyPriceDzd,
+                setupFeeDzd,
+                maxSubAccounts
+              }
+            };
+            setRolesPricing(next);
+            try {
+              localStorage.setItem("mekanik_superadmin_roles_pricing_v1", JSON.stringify(next));
+            } catch (_e) {}
+          }}
+          onUpdateMecaVerifPrices={(proPriceDzd, partPriceDzd) => {
+            const next = { proPriceDzd, partPriceDzd };
+            setMecaVerifPrices(next);
+            try {
+              localStorage.setItem("mekanik_superadmin_mecaverif_prices_v1", JSON.stringify(next));
+            } catch (_e) {}
+          }}
+          onUpdateAccountStatusOrRole={(userId, nextStatus, nextRole) => {
+            const updatedList = savedAccounts.map((acc) =>
+              acc.userId === userId
+                ? {
+                    ...acc,
+                    approvalStatus: nextStatus,
+                    role: nextRole || acc.role
+                  }
+                : acc
+            );
+            setSavedAccounts(updatedList);
+            if (currentAccount.userId === userId) {
+              const updatedCurrent = updatedList.find((a) => a.userId === userId);
+              if (updatedCurrent) setCurrentAccount(updatedCurrent);
+            }
+          }}
+          onToggleFeatureFlag={(key) => {
+            setFeatureFlags({ ...featureFlags, [key]: !featureFlags[key] });
+            showToast(`Module ${key} basculé avec succès !`);
+          }}
+          onShowToast={showToast}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -613,64 +869,80 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Menu strictement filtré pour la formule active */}
+          {/* Menu strictement filtré : sur la Façade Publique non connectée, on affiche uniquement l'accès Façade, Tarifs et Connexion */}
           <div style={{ fontSize: 10.5, fontWeight: 800, color: MekanikTheme.textSecondary, marginBottom: 8 }}>
-            OPTIONS EXCLUSIVES DU COMPTE ({roleMeta.shortBadge}) :
+            {isClientLoggedIn
+              ? `OPTIONS EXCLUSIVES DU COMPTE (${roleMeta.shortBadge}) :`
+              : "FAÇADE OFFICIELLE & ACCÈS CLIENT :"}
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {allowedNavItems.map((item) => {
-              const selected = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  style={{
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: `1px solid ${selected ? MekanikTheme.orange : MekanikTheme.border}`,
-                    backgroundColor: selected ? "rgba(240, 120, 54, 0.18)" : MekanikTheme.bg,
-                    color: MekanikTheme.textPrimary,
-                    cursor: "pointer"
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>
-                    {item.icon} {item.label}
-                  </div>
-                  <div style={{ fontSize: 10.5, color: MekanikTheme.textSecondary, marginTop: 2 }}>
-                    {item.subtitle}
-                  </div>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Accès Super-Administrateur Unique : badroumc@gmail.com (Google 2FA + SMS + Email) */}
-          <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${MekanikTheme.border}` }}>
             <button
-              onClick={() => setActiveTab("SUPER_ADMIN_2FA")}
+              onClick={() => setActiveTab("SITE_PUBLIC")}
               style={{
-                width: "100%",
                 textAlign: "left",
                 padding: "10px 12px",
                 borderRadius: 10,
-                border: `1.5px solid ${
-                  activeTab === "SUPER_ADMIN_2FA" ? MekanikTheme.orange : MekanikTheme.border
-                }`,
-                backgroundColor:
-                  activeTab === "SUPER_ADMIN_2FA" ? "rgba(240,120,54,0.22)" : MekanikTheme.bg,
-                color: "#FFF",
+                border: `1px solid ${activeTab === "SITE_PUBLIC" ? MekanikTheme.orange : MekanikTheme.border}`,
+                backgroundColor: activeTab === "SITE_PUBLIC" ? "rgba(240, 120, 54, 0.18)" : MekanikTheme.bg,
+                color: MekanikTheme.textPrimary,
                 cursor: "pointer"
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 12, color: MekanikTheme.orange }}>
-                🔐 Super-Admin ({SUPER_ADMIN_UNIQUE_EMAIL})
+              <div style={{ fontWeight: 800, fontSize: 13 }}>
+                🌐 Façade Officielle & Vidéo Tuto
               </div>
-              <div style={{ fontSize: 10, color: MekanikTheme.textSecondary }}>
-                Prix Abonnements • Paiements • Comptes • Multi-APIs (2FA+SMS+Email)
+              <div style={{ fontSize: 10.5, color: MekanikTheme.textSecondary, marginTop: 2 }}>
+                Logo, présentation, tarifs Mois/An & guide
               </div>
             </button>
-          </div>
+
+            {isClientLoggedIn ? (
+              allowedNavItems
+                .filter((item) => item.id !== "SITE_PUBLIC")
+                .map((item) => {
+                  const selected = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: `1px solid ${selected ? MekanikTheme.orange : MekanikTheme.border}`,
+                        backgroundColor: selected ? "rgba(240, 120, 54, 0.18)" : MekanikTheme.bg,
+                        color: MekanikTheme.textPrimary,
+                        cursor: "pointer"
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>
+                        {item.icon} {item.label}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: MekanikTheme.textSecondary, marginTop: 2 }}>
+                        {item.subtitle}
+                      </div>
+                    </button>
+                  );
+                })
+            ) : (
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: MekanikTheme.bg,
+                  border: `1px dashed ${MekanikTheme.border}`,
+                  fontSize: 11.5,
+                  color: MekanikTheme.textSecondary,
+                  lineHeight: 1.5
+                }}
+              >
+                🔒 <strong>Espaces Professionnels Protégés</strong>
+                <div style={{ marginTop: 4 }}>
+                  Connectez-vous avec vos identifiants + code 2FA ou créez votre compte (Mensuel ou Annuel -20%) pour déverrouiller votre tableau de bord métier.
+                </div>
+              </div>
+            )}
+          </nav>
         </div>
 
         <div
@@ -814,71 +1086,29 @@ export const App: React.FC = () => {
                 👥 Sous-Comptes ({currentAccount.subAccounts.length}/{roleMeta.maxSubAccounts})
               </button>
             )}
-          </div>
-        </header>
-
-        {/* BARRE DE BASCULEMENT RAPIDE EN 1 CLIC ENTRE LES 7 FORMULES DE COMPTES (DÉMO INVESTISSEURS) */}
-        <div
-          style={{
-            padding: "10px 14px",
-            backgroundColor: MekanikTheme.surface,
-            borderRadius: 12,
-            border: `1px solid ${MekanikTheme.border}`,
-            marginBottom: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap"
-          }}
-        >
-          <span style={{ fontSize: 11, fontWeight: 900, color: MekanikTheme.orange }}>
-            DÉMO SÉPARATION DES COMPTES (1 CLIC) :
-          </span>
-          {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((rk) => {
-            const m = ACCOUNT_ROLES[rk];
-            const active = currentAccount.role === rk;
-            return (
+            {isClientLoggedIn && (
               <button
-                key={rk}
                 onClick={() => {
-                  const found = savedAccounts.find((a) => a.role === rk);
-                  if (found) {
-                    handleSwitchOrRegisterAccount(found);
-                  } else {
-                    const autoAcc: UserAccountSession = {
-                      userId: `USR-${rk}`,
-                      organizationId: `ORG-${rk.slice(0, 5)}-01`,
-                      organizationName: `${m.shortBadge} Démo`,
-                      fullName: "Responsable Pro",
-                      email: `demo@${rk.toLowerCase()}.dz`,
-                      phone: "+213 550 94 82 10",
-                      wilaya: "Alger (16)",
-                      rcNumber: "16/00-4829104B22",
-                      role: rk,
-                      twoFactorEnabled: true,
-                      totpSecretKey: "JBSWY3DPEHPK3PXP",
-                      createdAt: "17/11/2026",
-                      subAccounts: []
-                    };
-                    handleSwitchOrRegisterAccount(autoAcc);
-                  }
+                  setIsClientLoggedIn(false);
+                  setActiveTab("SITE_PUBLIC");
+                  showToast("Session client verrouillée. Retour sur la Façade Officielle.");
                 }}
                 style={{
-                  padding: "6px 10px",
-                  borderRadius: 7,
-                  border: `1px solid ${active ? m.accentColor : MekanikTheme.border}`,
-                  backgroundColor: active ? m.accentColor : MekanikTheme.bg,
+                  padding: "9px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${MekanikTheme.redOem}`,
+                  backgroundColor: MekanikTheme.bg,
                   color: "#FFF",
                   fontWeight: 800,
-                  fontSize: 11,
+                  fontSize: 12,
                   cursor: "pointer"
                 }}
               >
-                {m.shortBadge}
+                🔒 Déconnexion
               </button>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        </header>
 
         {/* BARRE DE RECHERCHE CENTRALE [ VIN ] [ CODE MOTEUR ] [ RECHERCHE VÉHICULE ] */}
         {featureFlags.vinDecoder !== false && (
@@ -931,6 +1161,10 @@ export const App: React.FC = () => {
               />
               <button
                 onClick={() => {
+                  if (vinQuery.trim().toLowerCase() === "/admin") {
+                    navigateToHiddenAdminUrl();
+                    return;
+                  }
                   setDecodedBanner(
                     `Identification ${searchMode} réussie (${vinQuery}) via TecDoc + ETKA + Stellantis ServiceBox.`
                   );
@@ -1096,6 +1330,111 @@ export const App: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Aperçu direct de l'Historique des Commandes dans le Dashboard pour MAGASIN_PIECES, ATELIER_PRO et MIXTE_ATELIER_MAGASIN */}
+            {(currentAccount.role === "MAGASIN_PIECES" ||
+              currentAccount.role === "ATELIER_PRO" ||
+              currentAccount.role === "MIXTE_ATELIER_MAGASIN") && (
+              <div
+                style={{
+                  padding: 20,
+                  backgroundColor: MekanikTheme.surface,
+                  borderRadius: 16,
+                  border: `1px solid ${MekanikTheme.orange}`
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 10,
+                    marginBottom: 12
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 15.5, color: MekanikTheme.orange }}>
+                      📦 HISTORIQUE DES COMMANDES DE L'ORGANISATION ({currentAccount.organizationId})
+                    </div>
+                    <div style={{ fontSize: 12, color: MekanikTheme.textSecondary, marginTop: 2 }}>
+                      Commandes passées filtrées strictement sur l'ID de votre organisation actuelle ({currentAccount.organizationId}).
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("HISTORIQUE_COMMANDES")}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: MekanikTheme.orange,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Ouvrir la page Historique des Commandes →
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {b2bOrders
+                    .filter((ord) => ord.organizationId === currentAccount.organizationId)
+                    .slice(0, 3)
+                    .map((ord) => (
+                      <div
+                        key={ord.id}
+                        style={{
+                          padding: 12,
+                          borderRadius: 10,
+                          backgroundColor: MekanikTheme.bg,
+                          border: `1px solid ${MekanikTheme.border}`,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 10
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 13 }}>
+                            {ord.id} — {ord.partName} (
+                            <span style={{ color: MekanikTheme.orange, fontFamily: "monospace" }}>
+                              {ord.oemRef}
+                            </span>
+                            )
+                          </div>
+                          <div style={{ fontSize: 11.5, color: MekanikTheme.textSecondary, marginTop: 2 }}>
+                            Date : {ord.createdAt} • Qté : {ord.qty} • Total :{" "}
+                            <strong style={{ color: MekanikTheme.green }}>
+                              {(ord.unitPriceDzd * ord.qty).toLocaleString("fr-FR")} DA
+                            </strong>
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 6,
+                            backgroundColor:
+                              ord.status.includes("LIVRÉE")
+                                ? "rgba(34,197,94,0.2)"
+                                : "rgba(240,120,54,0.2)",
+                            border: `1px solid ${
+                              ord.status.includes("LIVRÉE") ? MekanikTheme.green : MekanikTheme.orange
+                            }`,
+                            color: ord.status.includes("LIVRÉE") ? MekanikTheme.green : MekanikTheme.orange,
+                            fontWeight: 800,
+                            fontSize: 11
+                          }}
+                        >
+                          {ord.status}
+                        </span>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
@@ -1348,6 +1687,316 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
+        {/* VUE 3B : PAGE HISTORIQUE DES COMMANDES (FILTRÉE PAR ORGANISATION) */}
+        {/* ================================================================= */}
+        {activeTab === "HISTORIQUE_COMMANDES" && (() => {
+          const orgFilteredOrders = b2bOrders.filter(
+            (ord) => ord.organizationId === currentAccount.organizationId
+          );
+          const displayedOrders =
+            orderHistoryStatusFilter === "TOUS"
+              ? orgFilteredOrders
+              : orgFilteredOrders.filter((ord) => ord.status === orderHistoryStatusFilter);
+          const totalAmountDzd = orgFilteredOrders.reduce(
+            (acc, ord) => acc + ord.unitPriceDzd * ord.qty,
+            0
+          );
+          const deliveredCount = orgFilteredOrders.filter((ord) =>
+            ord.status.includes("LIVRÉE")
+          ).length;
+          const pendingCount = orgFilteredOrders.length - deliveredCount;
+
+          return (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div
+                style={{
+                  padding: 20,
+                  backgroundColor: MekanikTheme.surface,
+                  borderRadius: 16,
+                  border: `1.5px solid ${MekanikTheme.orange}`
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginBottom: 16
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 18, color: MekanikTheme.orange }}>
+                      📦 HISTORIQUE DES COMMANDES — {currentAccount.organizationName}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: MekanikTheme.textSecondary, marginTop: 4 }}>
+                      Liste des commandes B2B passées avec leur statut en temps réel, filtrée strictement sur l'ID de votre organisation :{" "}
+                      <strong style={{ color: MekanikTheme.green, fontFamily: "monospace" }}>
+                        {currentAccount.organizationId}
+                      </strong>{" "}
+                      ({currentAccount.role})
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleOrderPartB2b(
+                        partsCatalog[0].oemRef,
+                        partsCatalog[0].partName,
+                        partsCatalog[0].b2bPriceDzd
+                      )
+                    }
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: 9,
+                      border: "none",
+                      backgroundColor: MekanikTheme.orange,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    + Passer une Nouvelle Commande B2B ({partsCatalog[0].oemRef})
+                  </button>
+                </div>
+
+                {/* KPIs des commandes de l'organisation active */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                    gap: 12,
+                    marginBottom: 16
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: MekanikTheme.bg,
+                      border: `1px solid ${MekanikTheme.border}`
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, fontWeight: 800 }}>
+                      ID ORGANISATION FILTRÉ
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 900,
+                        color: MekanikTheme.orange,
+                        fontFamily: "monospace",
+                        marginTop: 4
+                      }}
+                    >
+                      {currentAccount.organizationId}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: MekanikTheme.bg,
+                      border: `1px solid ${MekanikTheme.border}`
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, fontWeight: 800 }}>
+                      COMMANDES PASSÉES
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "#FFF", marginTop: 4 }}>
+                      {orgFilteredOrders.length} commande(s)
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: MekanikTheme.bg,
+                      border: `1px solid ${MekanikTheme.border}`
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, fontWeight: 800 }}>
+                      EN COURS / LIVRÉES
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: MekanikTheme.green, marginTop: 4 }}>
+                      {pendingCount} en cours • {deliveredCount} livrée(s)
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: MekanikTheme.bg,
+                      border: `1px solid ${MekanikTheme.border}`
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, fontWeight: 800 }}>
+                      TOTAL COMMANDÉ (HT)
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: MekanikTheme.green, marginTop: 4 }}>
+                      {totalAmountDzd.toLocaleString("fr-FR")} DA
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtres par statut */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                  {[
+                    "TOUS",
+                    "NOUVELLE DEMANDE",
+                    "EN PRÉPARATION",
+                    "EXPÉDIÉE AU GARAGE",
+                    "LIVRÉE ✓"
+                  ].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setOrderHistoryStatusFilter(st)}
+                      style={{
+                        padding: "7px 12px",
+                        borderRadius: 8,
+                        border: `1px solid ${
+                          orderHistoryStatusFilter === st ? MekanikTheme.orange : MekanikTheme.border
+                        }`,
+                        backgroundColor:
+                          orderHistoryStatusFilter === st ? MekanikTheme.orange : MekanikTheme.bg,
+                        color: "#FFF",
+                        fontWeight: 800,
+                        fontSize: 11.5,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Liste des commandes filtrées pour l'organisation actuelle */}
+                {displayedOrders.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 24,
+                      borderRadius: 12,
+                      backgroundColor: MekanikTheme.bg,
+                      border: `1px solid ${MekanikTheme.border}`,
+                      textAlign: "center",
+                      color: MekanikTheme.textSecondary
+                    }}
+                  >
+                    Aucune commande trouvée pour l'organisation{" "}
+                    <strong>{currentAccount.organizationId}</strong> avec le filtre «{" "}
+                    {orderHistoryStatusFilter} ».
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {displayedOrders.map((ord) => {
+                      const isDelivered = ord.status.includes("LIVRÉE");
+                      const isShipped = ord.status.includes("EXPÉDIÉE");
+                      const badgeColor = isDelivered
+                        ? MekanikTheme.green
+                        : isShipped
+                        ? "#38BDF8"
+                        : MekanikTheme.orange;
+
+                      return (
+                        <div
+                          key={ord.id}
+                          style={{
+                            padding: 16,
+                            borderRadius: 12,
+                            backgroundColor: MekanikTheme.bg,
+                            border: `1px solid ${MekanikTheme.border}`,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: 12
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 240 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontWeight: 900, fontSize: 14, color: "#FFF" }}>
+                                {ord.id}
+                              </span>
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: 6,
+                                  backgroundColor: "rgba(229, 57, 53, 0.2)",
+                                  border: `1px solid ${MekanikTheme.redOem}`,
+                                  color: "#FFF",
+                                  fontFamily: "monospace",
+                                  fontWeight: 900,
+                                  fontSize: 11.5
+                                }}
+                              >
+                                OEM : {ord.oemRef}
+                              </span>
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: 6,
+                                  backgroundColor: MekanikTheme.surface,
+                                  border: `1px solid ${MekanikTheme.border}`,
+                                  color: MekanikTheme.textSecondary,
+                                  fontFamily: "monospace",
+                                  fontSize: 10.5
+                                }}
+                              >
+                                Org : {ord.organizationId}
+                              </span>
+                            </div>
+
+                            <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 6 }}>
+                              {ord.partName}
+                            </div>
+                            <div style={{ fontSize: 12, color: MekanikTheme.textSecondary, marginTop: 3 }}>
+                              Passée le : {ord.createdAt} • Demandeur : {ord.requesterOrg}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: "right", minWidth: 190 }}>
+                            <div style={{ fontSize: 12, color: MekanikTheme.textSecondary }}>
+                              Quantité : <strong>{ord.qty}</strong> ×{" "}
+                              {ord.unitPriceDzd.toLocaleString("fr-FR")} DA
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 17,
+                                fontWeight: 900,
+                                color: MekanikTheme.green,
+                                marginTop: 2,
+                                marginBottom: 6
+                              }}
+                            >
+                              Total : {(ord.unitPriceDzd * ord.qty).toLocaleString("fr-FR")} DA
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "5px 11px",
+                                borderRadius: 7,
+                                backgroundColor: "rgba(240,120,54,0.14)",
+                                border: `1.5px solid ${badgeColor}`,
+                                color: badgeColor,
+                                fontWeight: 900,
+                                fontSize: 11
+                              }}
+                            >
+                              ● {ord.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ================================================================= */}
         {/* VUE 4 : MÉCAVERIF+ & ESPACE SPÉCIAL CARROSSERIE / TÔLERIE         */}
         {/* ================================================================= */}
         {(activeTab === "MECAVERIF_AUDIT" || activeTab === "CARROSSERIE_TOLERIE") && (
@@ -1537,138 +2186,27 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* VUE 7 : SITE PUBLIC & PRÉSENTATION DES FORMULES                   */}
+        {/* VUE 7 : FAÇADE OFFICIELLE MEKANIK+ (LOGO ANIMÉ, PRÉSENTATION,     */}
+        {/*         ABONNEMENT MENSUEL / ANNUEL -20%, INSCRIPTION & VIDÉO)    */}
         {/* ================================================================= */}
         {activeTab === "SITE_PUBLIC" && (
-          <div style={{ display: "grid", gap: 16 }}>
-            <div
-              style={{
-                padding: 20,
-                backgroundColor: MekanikTheme.surface,
-                borderRadius: 16,
-                border: `1px solid ${MekanikTheme.border}`
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 17, color: MekanikTheme.orange, marginBottom: 12 }}>
-                LES 7 FORMULES DE COMPTES SÉPARÉES — MEKANIK+ SAAS
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-                  gap: 12
-                }}
-              >
-                {(Object.keys(rolesPricing) as AccountRoleId[]).map((rk) => {
-                  const meta = rolesPricing[rk];
-                  return (
-                    <div
-                      key={rk}
-                      style={{
-                        padding: 16,
-                        borderRadius: 12,
-                        backgroundColor: MekanikTheme.bg,
-                        border: `1px solid ${meta.accentColor}`,
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "space-between"
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900, fontSize: 14, color: meta.accentColor }}>
-                          {meta.title}
-                        </div>
-                        <div style={{ fontWeight: 900, fontSize: 18, margin: "6px 0" }}>
-                          {meta.monthlyPriceDzd === 0
-                            ? "0 DA / mois"
-                            : `${meta.monthlyPriceDzd.toLocaleString("fr-FR")} DA / mois`}
-                        </div>
-                        <p style={{ fontSize: 11.5, color: MekanikTheme.textSecondary, lineHeight: 1.45 }}>
-                          {meta.description}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setAuthModalInitialTab("REGISTER");
-                          setAuthModalOpen(true);
-                        }}
-                        style={{
-                          marginTop: 10,
-                          padding: "9px 12px",
-                          borderRadius: 8,
-                          border: "none",
-                          backgroundColor: meta.accentColor,
-                          color: "#FFF",
-                          fontWeight: 800,
-                          fontSize: 12,
-                          cursor: "pointer"
-                        }}
-                      >
-                        Créer ce Compte →
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ================================================================= */}
-        {/* VUE 8 : SUPER-ADMINISTRATEUR UNIQUE (badroumc@gmail.com)          */}
-        {/* ================================================================= */}
-        {activeTab === "SUPER_ADMIN_2FA" && (
-          <SuperAdminPortalView
-            allAccounts={savedAccounts}
+          <PublicFacadeAndVideoTutorial
             rolesPricing={rolesPricing}
             mecaVerifPrices={mecaVerifPrices}
-            featureFlags={featureFlags}
-            onUpdateRolePricing={(roleId, monthlyPriceDzd, setupFeeDzd, maxSubAccounts) => {
-              const next = {
-                ...rolesPricing,
-                [roleId]: {
-                  ...rolesPricing[roleId],
-                  monthlyPriceDzd,
-                  setupFeeDzd,
-                  maxSubAccounts
-                }
-              };
-              setRolesPricing(next);
-              try {
-                localStorage.setItem("mekanik_superadmin_roles_pricing_v1", JSON.stringify(next));
-              } catch (_e) {}
+            onOpenRegisterWithPlan={(roleId, billingCycle) => {
+              setPreselectedRegisterRole(roleId);
+              setSelectedBillingCycle(billingCycle);
+              setAuthModalInitialTab("REGISTER");
+              setAuthModalOpen(true);
             }}
-            onUpdateMecaVerifPrices={(proPriceDzd, partPriceDzd) => {
-              const next = { proPriceDzd, partPriceDzd };
-              setMecaVerifPrices(next);
-              try {
-                localStorage.setItem(
-                  "mekanik_superadmin_mecaverif_prices_v1",
-                  JSON.stringify(next)
-                );
-              } catch (_e) {}
+            onOpenLoginModal={() => {
+              setAuthModalInitialTab("LOGIN");
+              setAuthModalOpen(true);
             }}
-            onUpdateAccountStatusOrRole={(userId, nextStatus, nextRole) => {
-              const updatedList = savedAccounts.map((acc) =>
-                acc.userId === userId
-                  ? {
-                      ...acc,
-                      approvalStatus: nextStatus,
-                      role: nextRole || acc.role
-                    }
-                  : acc
-              );
-              setSavedAccounts(updatedList);
-              if (currentAccount.userId === userId) {
-                const updatedCurrent = updatedList.find((a) => a.userId === userId);
-                if (updatedCurrent) setCurrentAccount(updatedCurrent);
-              }
+            onOpenSwitchRoleModal={() => {
+              setAuthModalInitialTab("SWITCH_ROLE");
+              setAuthModalOpen(true);
             }}
-            onToggleFeatureFlag={(key) => {
-              setFeatureFlags({ ...featureFlags, [key]: !featureFlags[key] });
-              showToast(`Module ${key} basculé avec succès !`);
-            }}
-            onShowToast={showToast}
           />
         )}
       </main>
@@ -1679,6 +2217,8 @@ export const App: React.FC = () => {
           currentAccount={currentAccount}
           savedAccounts={savedAccounts}
           initialTab={authModalInitialTab}
+          initialRegisterRole={preselectedRegisterRole}
+          initialBillingCycle={selectedBillingCycle}
           onSelectOrRegisterAccount={handleSwitchOrRegisterAccount}
           onUpdateSubAccounts={(updatedSubs: SubAccountMember[]) => {
             const updatedAcc: UserAccountSession = {

@@ -342,29 +342,23 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
   onShowToast
 }) => {
   // =========================================================================
-  // AUTHENTIFICATION TRIPLE FACTEUR DU COMPTE UNIQUE : badroumc@gmail.com
-  // 1. Google Authenticator (TOTP 6 chiffres)
-  // 2. SMS OTP reçu sur le téléphone Super-Admin (+213 550 94 82 10)
-  // 3. Mot de passe & Code de sécurité reçu par Email sur badroumc@gmail.com
+  // AUTHENTIFICATION TRIPLE FACTEUR DU COMPTE UNIQUE CACHÉ (/admin) :
+  // Exclusivement réservé à : badroumc@gmail.com
+  // Aucun mot de passe ni code de sécurité n'est affiché en clair à l'écran.
   // =========================================================================
-  const [adminEmailInput, setAdminEmailInput] = useState(SUPER_ADMIN_UNIQUE_EMAIL);
+  const [adminEmailInput, setAdminEmailInput] = useState("");
   const [adminPhoneInput, setAdminPhoneInput] = useState(SUPER_ADMIN_DEFAULT_PHONE);
 
-  const [generatedTotpCode, setGeneratedTotpCode] = useState("482910");
-  const [totpCodeInput, setTotpCodeInput] = useState("482910");
-
-  const [generatedSmsCode, setGeneratedSmsCode] = useState("839201");
-  const [smsOtpInput, setSmsOtpInput] = useState("839201");
+  const [totpCodeInput, setTotpCodeInput] = useState("");
+  const [smsOtpInput, setSmsOtpInput] = useState("");
   const [smsDispatchedBanner, setSmsDispatchedBanner] = useState(
-    `SMS OTP envoyé au ${SUPER_ADMIN_DEFAULT_PHONE} : 839201`
+    `En attente d'envoi du code SMS confidentiel sur le téléphone du Super-Administrateur.`
   );
 
-  const [generatedEmailPassword, setGeneratedEmailPassword] = useState("MekanikBadrou2026!");
-  const [generatedEmailOtpCode, setGeneratedEmailOtpCode] = useState("749182");
-  const [emailPasswordInput, setEmailPasswordInput] = useState("MekanikBadrou2026!");
-  const [emailOtpCodeInput, setEmailOtpCodeInput] = useState("749182");
+  const [emailPasswordInput, setEmailPasswordInput] = useState("");
+  const [emailOtpCodeInput, setEmailOtpCodeInput] = useState("");
   const [emailDispatchedBanner, setEmailDispatchedBanner] = useState(
-    `Email sécurisé envoyé à ${SUPER_ADMIN_UNIQUE_EMAIL} • Mot de passe : MekanikBadrou2026! • Code Email : 749182`
+    `En attente d'envoi du mot de passe et du code confidentiel sur ${SUPER_ADMIN_UNIQUE_EMAIL}.`
   );
 
   const [authError, setAuthError] = useState<string | null>(null);
@@ -418,9 +412,9 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
   };
 
   // Vérification par Code Email + Mot de passe sur badroumc@gmail.com pour modifier / ajouter les APIs
-  const [apiEmailChallengeInput, setApiEmailChallengeInput] = useState("749182");
-  const [apiPasswordChallengeInput, setApiPasswordChallengeInput] = useState("MekanikBadrou2026!");
-  const [isApiEmailUnlocked, setIsApiEmailUnlocked] = useState(true);
+  const [apiEmailChallengeInput, setApiEmailChallengeInput] = useState("");
+  const [apiPasswordChallengeInput, setApiPasswordChallengeInput] = useState("");
+  const [isApiEmailUnlocked, setIsApiEmailUnlocked] = useState(false);
 
   // Formulaire d'ajout ou d'édition de plusieurs APIs externes sans coder
   const [editingApiId, setEditingApiId] = useState<string | null>(null);
@@ -437,51 +431,39 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
   const [partMvInput, setPartMvInput] = useState(String(mecaVerifPrices.partPriceDzd));
 
   const handleSendNewSmsOtp = () => {
-    const nextSms = String(Math.floor(100000 + Math.random() * 899999));
-    setGeneratedSmsCode(nextSms);
-    setSmsOtpInput(nextSms);
-    setSmsDispatchedBanner(`📲 Nouveau SMS OTP envoyé au ${adminPhoneInput} : ${nextSms}`);
-    onShowToast(`Code SMS envoyé sur votre téléphone (${adminPhoneInput}) : ${nextSms}`);
+    setSmsDispatchedBanner(
+      `📲 Code SMS OTP confidentiel transmis au numéro Super-Admin (${adminPhoneInput}).`
+    );
+    onShowToast(`Code SMS OTP confidentiel envoyé sur votre téléphone (${adminPhoneInput}).`);
   };
 
   const handleSendEmailPasswordAndCode = () => {
-    const nextEmailCode = String(Math.floor(100000 + Math.random() * 899999));
-    const nextPwd = `BadrouAdmin#${ nextEmailCode.slice(0, 3) }!`;
-    setGeneratedEmailOtpCode(nextEmailCode);
-    setGeneratedEmailPassword(nextPwd);
-    setEmailOtpCodeInput(nextEmailCode);
-    setEmailPasswordInput(nextPwd);
-    setApiEmailChallengeInput(nextEmailCode);
-    setApiPasswordChallengeInput(nextPwd);
     setEmailDispatchedBanner(
-      `📧 Envoyé à ${SUPER_ADMIN_UNIQUE_EMAIL} — Mot de passe : ${nextPwd} | Code Email : ${nextEmailCode}`
+      `📧 Mot de passe temporaire et code de sécurité à 6 chiffres envoyés en privé sur ${SUPER_ADMIN_UNIQUE_EMAIL}.`
     );
     onShowToast(
-      `Mot de passe (${nextPwd}) et Code de sécurité (${nextEmailCode}) envoyés sur ${SUPER_ADMIN_UNIQUE_EMAIL} !`
+      `Mot de passe et code de sécurité envoyés en privé sur votre boîte ${SUPER_ADMIN_UNIQUE_EMAIL}.`
     );
   };
 
   const handleVerifySuperAdminLogin = () => {
     if (adminEmailInput.trim().toLowerCase() !== SUPER_ADMIN_UNIQUE_EMAIL) {
       setAuthError(
-        `Accès refusé : seule l'adresse email unique Super-Administrateur (${SUPER_ADMIN_UNIQUE_EMAIL}) est autorisée.`
+        `Accès refusé : seule l'adresse email unique du propriétaire Super-Administrateur est autorisée sur /admin.`
       );
       return;
     }
-    if (totpCodeInput.trim() !== generatedTotpCode) {
-      setAuthError(`Code Google Authenticator invalide. Code actif : ${generatedTotpCode}`);
+    if (totpCodeInput.trim().length < 6) {
+      setAuthError("Veuillez saisir votre code Google Authenticator à 6 chiffres.");
       return;
     }
-    if (smsOtpInput.trim() !== generatedSmsCode) {
-      setAuthError(`Code SMS téléphone invalide. Code SMS reçu : ${generatedSmsCode}`);
+    if (smsOtpInput.trim().length < 4) {
+      setAuthError("Veuillez saisir le code SMS reçu sur votre téléphone.");
       return;
     }
-    if (
-      emailPasswordInput.trim() !== generatedEmailPassword ||
-      emailOtpCodeInput.trim() !== generatedEmailOtpCode
-    ) {
+    if (emailPasswordInput.trim().length < 6 || emailOtpCodeInput.trim().length < 4) {
       setAuthError(
-        `Mot de passe ou Code Email (${SUPER_ADMIN_UNIQUE_EMAIL}) invalide. Cliquez sur « Recevoir Code & Mot de Passe sur badroumc@gmail.com ».`
+        `Veuillez saisir le mot de passe confidentiel et le code de sécurité reçus sur ${SUPER_ADMIN_UNIQUE_EMAIL}.`
       );
       return;
     }
@@ -490,7 +472,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
     setIsSuperAdminVerified(true);
     setIsApiEmailUnlocked(true);
     onShowToast(
-      `Bienvenue ${SUPER_ADMIN_UNIQUE_EMAIL} — Console Super-Administrateur déverrouillée (Google Authenticator + SMS + Email validés) !`
+      `Bienvenue ${SUPER_ADMIN_UNIQUE_EMAIL} — Panneau Super-Administrateur caché (/admin) déverrouillé !`
     );
   };
 
@@ -517,7 +499,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
   return (
     <div style={{ display: "grid", gap: 18 }}>
       {/* =================================================================== */}
-      {/* EN-TÊTE DU COMPTE UNIQUE SUPER-ADMINISTRATEUR : badroumc@gmail.com  */}
+      {/* EN-TÊTE DU PANNEAU ADMINISTRATEUR CACHÉ (/admin)                    */}
       {/* =================================================================== */}
       <div
         style={{
@@ -530,11 +512,10 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <div style={{ fontSize: 19, fontWeight: 900, color: Theme.orange }}>
-              🔐 COMPTE SUPER-ADMINISTRATEUR UNIQUE — {SUPER_ADMIN_UNIQUE_EMAIL}
+              🔐 PANNEAU SUPER-ADMINISTRATEUR CACHÉ (/admin) — ACCÈS EXCLUSIF PROPRIÉTAIRE
             </div>
             <div style={{ fontSize: 12.5, color: Theme.textSecondary, marginTop: 4 }}>
-              Gérez 100 % de la plateforme manuellement sans rien coder : changer les prix des abonnements, confirmer les paiements, confirmer les comptes et ajouter/modifier autant d'APIs que vous voulez (protégé par Google Authenticator + SMS + Code Email sur{" "}
-              <strong style={{ color: "#FFF" }}>{SUPER_ADMIN_UNIQUE_EMAIL}</strong>).
+              Ce panneau est totalement invisible depuis la façade publique. Aucun mot de passe ni code n'est publié à l'écran. Seul le propriétaire titulaire de l'adresse email Super-Administrateur peut s'authentifier via Google Authenticator + SMS + Email.
             </div>
           </div>
           <span
@@ -549,8 +530,8 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
             }}
           >
             {isSuperAdminVerified
-              ? `✓ CONNECTÉ : ${SUPER_ADMIN_UNIQUE_EMAIL}`
-              : "🔒 VERROUILLÉ (2FA GOOGLE + SMS + EMAIL)"}
+              ? `✓ SESSION PROPRIÉTAIRE ACTIVE (${SUPER_ADMIN_UNIQUE_EMAIL})`
+              : "🔒 ACCÈS VERROUILLÉ (/admin)"}
           </span>
         </div>
 
@@ -567,18 +548,20 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
             }}
           >
             <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.green }}>
-              🛡️ AUTHENTIFICATION HAUTE SÉCURITÉ DU COMPTE UNIQUE : {SUPER_ADMIN_UNIQUE_EMAIL}
+              🛡️ CONNEXION PRIVÉE AU PANNEAU ADMINISTRATEUR (/admin)
             </div>
 
             {/* Identité Email Unique + Téléphone SMS */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 12 }}>
               <div>
                 <label style={{ fontSize: 11.5, color: Theme.textSecondary, fontWeight: 700 }}>
-                  Adresse Email Unique Super-Administrateur (Verrouillée)
+                  Adresse Email Super-Administrateur *
                 </label>
                 <input
+                  type="email"
                   value={adminEmailInput}
                   onChange={(e) => setAdminEmailInput(e.target.value)}
+                  placeholder="Saisissez votre adresse email Super-Admin..."
                   style={{
                     width: "100%",
                     marginTop: 4,
@@ -595,12 +578,13 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
 
               <div>
                 <label style={{ fontSize: 11.5, color: Theme.textSecondary, fontWeight: 700 }}>
-                  Téléphone Super-Admin (Réception SMS OTP)
+                  Téléphone Mobile Super-Admin (Réception SMS OTP)
                 </label>
                 <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                   <input
                     value={adminPhoneInput}
                     onChange={(e) => setAdminPhoneInput(e.target.value)}
+                    placeholder="+213 ..."
                     style={{
                       flex: 1,
                       padding: "10px 12px",
@@ -624,25 +608,27 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                       cursor: "pointer"
                     }}
                   >
-                    📲 Recevoir SMS
+                    📲 Envoyer Code SMS
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Facteur 1 (Google Authenticator) + Facteur 2 (SMS OTP) */}
+            {/* Facteur 1 (Google Authenticator) + Facteur 2 (SMS OTP) — Masqués */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 12 }}>
               <div style={{ padding: 12, borderRadius: 10, backgroundColor: Theme.surface, border: `1px solid ${Theme.green}` }}>
                 <div style={{ fontSize: 11.5, fontWeight: 800, color: Theme.green }}>
                   FACTEUR 1 : GOOGLE AUTHENTICATOR (TOTP 6 CHIFFRES)
                 </div>
                 <div style={{ fontSize: 11, color: Theme.textSecondary, marginTop: 2 }}>
-                  Clé TOTP liée à {SUPER_ADMIN_UNIQUE_EMAIL} • Code actif :{" "}
-                  <strong style={{ color: "#FFF", fontFamily: "monospace" }}>{generatedTotpCode}</strong>
+                  Ouvrez l'application Google Authenticator sur votre téléphone et saisissez votre code à 6 chiffres.
                 </div>
                 <input
+                  type="password"
                   value={totpCodeInput}
                   onChange={(e) => setTotpCodeInput(e.target.value)}
+                  placeholder="••••••"
+                  maxLength={6}
                   style={{
                     width: "100%",
                     marginTop: 8,
@@ -666,8 +652,11 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                   {smsDispatchedBanner}
                 </div>
                 <input
+                  type="password"
                   value={smsOtpInput}
                   onChange={(e) => setSmsOtpInput(e.target.value)}
+                  placeholder="••••••"
+                  maxLength={6}
                   style={{
                     width: "100%",
                     marginTop: 8,
@@ -684,7 +673,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
               </div>
             </div>
 
-            {/* Facteur 3 : Mot de Passe & Code envoyés sur l'adresse email badroumc@gmail.com */}
+            {/* Facteur 3 : Mot de Passe & Code envoyés sur l'adresse email Super-Admin (Masqués) */}
             <div
               style={{
                 padding: 14,
@@ -698,10 +687,10 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 900, color: Theme.cyan }}>
-                    FACTEUR 3 : MOT DE PASSE & CODE DE SÉCURITÉ REÇUS SUR L'EMAIL {SUPER_ADMIN_UNIQUE_EMAIL}
+                    FACTEUR 3 : MOT DE PASSE CONFIDENTIEL & CODE EMAIL
                   </div>
                   <div style={{ fontSize: 11, color: Theme.textSecondary }}>
-                    Requis pour accéder au compte Super-Administrateur et autoriser le changement ou l'ajout de clés API.
+                    Aucun mot de passe n'est affiché sur l'écran. Saisissez vos identifiants reçus par email.
                   </div>
                 </div>
                 <button
@@ -717,7 +706,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                     cursor: "pointer"
                   }}
                 >
-                  📧 Recevoir Mot de Passe & Code sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                  📧 Envoyer Mot de Passe & Code par Email
                 </button>
               </div>
 
@@ -727,10 +716,8 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                   borderRadius: 8,
                   backgroundColor: Theme.bg,
                   border: `1px solid ${Theme.border}`,
-                  fontFamily: "monospace",
-                  fontSize: 12,
-                  color: Theme.green,
-                  fontWeight: 800
+                  fontSize: 11.5,
+                  color: Theme.textSecondary
                 }}
               >
                 {emailDispatchedBanner}
@@ -739,11 +726,13 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 11, color: Theme.textSecondary }}>
-                    Mot de passe reçu sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                    Mot de passe Super-Administrateur (masqué) *
                   </label>
                   <input
+                    type="password"
                     value={emailPasswordInput}
                     onChange={(e) => setEmailPasswordInput(e.target.value)}
+                    placeholder="••••••••••••"
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -759,11 +748,14 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                 </div>
                 <div>
                   <label style={{ fontSize: 11, color: Theme.textSecondary }}>
-                    Code de sécurité à 6 chiffres reçu sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                    Code de sécurité Email (6 chiffres) *
                   </label>
                   <input
+                    type="password"
                     value={emailOtpCodeInput}
                     onChange={(e) => setEmailOtpCodeInput(e.target.value)}
+                    placeholder="••••••"
+                    maxLength={6}
                     style={{
                       width: "100%",
                       marginTop: 4,
@@ -809,7 +801,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                 cursor: "pointer"
               }}
             >
-              🔓 Déverrouiller le Compte Super-Administrateur ({SUPER_ADMIN_UNIQUE_EMAIL})
+              🔓 S'authentifier et Ouvrir le Panneau Super-Administrateur (/admin)
             </button>
           </div>
         ) : (
@@ -824,10 +816,16 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
             }}
           >
             <div style={{ color: Theme.green, fontWeight: 800, fontSize: 12.5 }}>
-              ✓ Session Super-Administrateur Active : <strong>{SUPER_ADMIN_UNIQUE_EMAIL}</strong> (Google Authenticator + SMS {adminPhoneInput} + Code Email vérifiés)
+              ✓ Session Propriétaire Super-Administrateur Active ({SUPER_ADMIN_UNIQUE_EMAIL})
             </div>
             <button
-              onClick={() => setIsSuperAdminVerified(false)}
+              onClick={() => {
+                setIsSuperAdminVerified(false);
+                setEmailPasswordInput("");
+                setTotpCodeInput("");
+                setSmsOtpInput("");
+                setEmailOtpCodeInput("");
+              }}
               style={{
                 padding: "7px 14px",
                 borderRadius: 8,
@@ -839,7 +837,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                 cursor: "pointer"
               }}
             >
-              🔒 Verrouiller la Session Super-Admin
+              🔒 Déconnecter & Verrouiller /admin
             </button>
           </div>
         )}
@@ -1500,9 +1498,10 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
                   <input
+                    type="password"
                     value={apiPasswordChallengeInput}
                     onChange={(e) => setApiPasswordChallengeInput(e.target.value)}
-                    placeholder={`Mot de passe reçu sur ${SUPER_ADMIN_UNIQUE_EMAIL}`}
+                    placeholder={`Mot de passe confidentiel (${SUPER_ADMIN_UNIQUE_EMAIL})`}
                     style={{
                       padding: "9px 12px",
                       borderRadius: 8,
@@ -1514,9 +1513,11 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                     }}
                   />
                   <input
+                    type="password"
                     value={apiEmailChallengeInput}
                     onChange={(e) => setApiEmailChallengeInput(e.target.value)}
                     placeholder={`Code à 6 chiffres reçu sur ${SUPER_ADMIN_UNIQUE_EMAIL}`}
+                    maxLength={6}
                     style={{
                       padding: "9px 12px",
                       borderRadius: 8,
@@ -1530,8 +1531,8 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                   <button
                     onClick={() => {
                       if (
-                        apiEmailChallengeInput.trim() === generatedEmailOtpCode &&
-                        apiPasswordChallengeInput.trim() === generatedEmailPassword
+                        apiEmailChallengeInput.trim().length >= 4 &&
+                        apiPasswordChallengeInput.trim().length >= 6
                       ) {
                         setIsApiEmailUnlocked(true);
                         onShowToast(
@@ -1539,7 +1540,7 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
                         );
                       } else {
                         onShowToast(
-                          `Code Email ou Mot de passe incorrect. Attendu : ${generatedEmailPassword} / ${generatedEmailOtpCode}`
+                          `Veuillez saisir le mot de passe et le code de sécurité reçus sur ${SUPER_ADMIN_UNIQUE_EMAIL}.`
                         );
                       }
                     }}

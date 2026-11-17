@@ -146,13 +146,13 @@ object SuperAdminGlobalControlRegistry {
     var superAdminPhoneNumber by mutableStateOf("+213 550 94 82 10")
     var activeSmsOtpCode by mutableStateOf("849206")
     var smsSentNotificationText by mutableStateOf(
-        "📲 SMS DMS Mécanicauto+ envoyé au +213 550 94 82 10 : Votre code de sécurité Super-Admin est 849206"
+        "📲 SMS de sécurité transmis sur le téléphone Super-Admin (+213 550 94 82 10) • Code masqué sur l'écran."
     )
 
     var activeEmailPassword by mutableStateOf("MekanikBadrou2026!")
     var activeEmailOtpCode by mutableStateOf("749182")
     var emailSentNotificationText by mutableStateOf(
-        "📧 Email envoyé à badroumc@gmail.com : Mot de passe [ MekanikBadrou2026! ] • Code de sécurité API [ 749182 ]"
+        "📧 Email sécurisé transmis à badroumc@gmail.com • Mot de passe & code de sécurité API masqués sur l'écran."
     )
 
     // Tarifs des abonnements & MécaVerif+ modifiables manuellement par badroumc@gmail.com sans coder
@@ -191,7 +191,7 @@ object SuperAdminGlobalControlRegistry {
         val newCode = String.format("%06d", (100000..999999).random())
         activeSmsOtpCode = newCode
         smsSentNotificationText =
-            "📲 SMS envoyé sur $cleanPhone : « [DMS Mécanicauto+] Code Super-Admin : $newCode (Valide 5 min - Ne jamais partager) »"
+            "📲 Nouveau SMS transmis sur $cleanPhone (Valide 5 min • Code confidentiel masqué sur l'écran)"
         return newCode
     }
 
@@ -206,7 +206,7 @@ object SuperAdminGlobalControlRegistry {
         activeEmailOtpCode = newEmailCode
         activeEmailPassword = newPwd
         emailSentNotificationText =
-            "📧 Envoyé sur $SUPER_ADMIN_UNIQUE_EMAIL : Mot de passe [ $newPwd ] • Code Email API [ $newEmailCode ]"
+            "📧 Nouvel email envoyé sur $SUPER_ADMIN_UNIQUE_EMAIL (Mot de passe & Code API confidentiels masqués)"
         return newPwd to newEmailCode
     }
 
@@ -891,9 +891,9 @@ fun SuperAdminNoCodeApiVaultSection(
     var totpCodeInput by remember { mutableStateOf("") }
     var smsCodeInput by remember { mutableStateOf("") }
     var phoneInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.superAdminPhoneNumber) }
-    var emailPasswordInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.activeEmailPassword) }
-    var emailCodeInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.activeEmailOtpCode) }
-    var smsDispatchedBannerVisible by remember { mutableStateOf(true) }
+    var emailPasswordInput by remember { mutableStateOf("") }
+    var emailCodeInput by remember { mutableStateOf("") }
+    var smsDispatchedBannerVisible by remember { mutableStateOf(false) }
     var totpErrorMessage by remember { mutableStateOf<String?>(null) }
 
     // Sous-navigation une fois déverrouillé : 0 = Clés API Multiples, 1 = Changer Prix Abonnements, 2 = Droits Sous-Comptes
@@ -908,16 +908,7 @@ fun SuperAdminNoCodeApiVaultSection(
             currentTimeMillis = System.currentTimeMillis()
         }
     }
-    val liveSuperAdminTotpCode = remember(currentTimeMillis / 30000L) {
-        GoogleAuthenticatorTotpEngine.generateTotpCode(
-            SuperAdminGlobalControlRegistry.SUPER_ADMIN_TOTP_SECRET,
-            currentTimeMillis
-        )
-    }
     val remainingSeconds = GoogleAuthenticatorTotpEngine.getRemainingSecondsInWindow(currentTimeMillis)
-    val activeSmsCode = SuperAdminGlobalControlRegistry.activeSmsOtpCode
-    val activeEmailPwd = SuperAdminGlobalControlRegistry.activeEmailPassword
-    val activeEmailCode = SuperAdminGlobalControlRegistry.activeEmailOtpCode
 
     // Formulaire d'ajout ou modification manuelle d'une API sans coder
     var showAddApiForm by remember { mutableStateOf(false) }
@@ -930,7 +921,7 @@ fun SuperAdminNoCodeApiVaultSection(
     var newApiWebhook by remember { mutableStateOf("https://api.mecanicautoplus.dz/webhooks/oem-sync") }
     var newApiHeaders by remember { mutableStateOf("{\"Accept\": \"application/json\"}") }
     var newApiEnv by remember { mutableStateOf("PRODUCTION") }
-    var revealSecrets by remember { mutableStateOf(true) }
+    var revealSecrets by remember { mutableStateOf(false) }
     var selectedCategoryFilter by remember { mutableStateOf("TOUTES") }
 
     // 1. Si l'utilisateur est un simple Administrateur ou Employé (et PAS badroumc@gmail.com) -> ACCÈS BLOQUÉ
@@ -1029,7 +1020,7 @@ fun SuperAdminNoCodeApiVaultSection(
 
                         HorizontalDivider(color = MetalBorder)
 
-                        // FACTEUR 1 : Carte Google Authenticator (TOTP RFC-6238)
+                        // FACTEUR 1 : Carte Google Authenticator (TOTP RFC-6238 — aucun code ni clé affichés en clair)
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = GraphiteDark,
@@ -1052,51 +1043,17 @@ fun SuperAdminNoCodeApiVaultSection(
                                         fontSize = 11.sp
                                     )
                                     Text(
-                                        text = "Expire dans ${remainingSeconds}s",
+                                        text = "Fenêtre : ${remainingSeconds}s",
                                         color = MekanikBrandOrange,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp
                                     )
                                 }
                                 Text(
-                                    text = "Clé Secrète Appairage : ${SuperAdminGlobalControlRegistry.SUPER_ADMIN_TOTP_SECRET}",
+                                    text = "Ouvrez l'application Google Authenticator sur votre téléphone personnel et saisissez votre code à 6 chiffres (aucun code n'est affiché en clair).",
                                     color = AluminumGray,
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace
+                                    fontSize = 10.5.sp
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "Code Google Authenticator actif :",
-                                            color = AluminumGray,
-                                            fontSize = 10.sp
-                                        )
-                                        Text(
-                                            text = "${liveSuperAdminTotpCode.take(3)} ${liveSuperAdminTotpCode.takeLast(3)}",
-                                            color = OffWhite,
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 20.sp,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    }
-                                    OutlinedButton(
-                                        onClick = {
-                                            totpCodeInput = liveSuperAdminTotpCode
-                                            totpErrorMessage = null
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, MekanikValidationGreen),
-                                        modifier = Modifier.testTag("btn_autofill_superadmin_totp")
-                                    ) {
-                                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MekanikValidationGreen, modifier = Modifier.size(15.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Injecter Code Authenticator", color = MekanikValidationGreen, fontWeight = FontWeight.Bold, fontSize = 10.5.sp)
-                                    }
-                                }
                             }
                         }
 
@@ -1107,7 +1064,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                 totpErrorMessage = null
                             },
                             label = { Text("1. Code à 6 chiffres Google Authenticator") },
-                            placeholder = { Text("Ex: $liveSuperAdminTotpCode") },
+                            placeholder = { Text("••••••") },
                             leadingIcon = { Icon(Icons.Default.Security, contentDescription = null, tint = MekanikValidationGreen) },
                             singleLine = true,
                             modifier = Modifier
@@ -1148,7 +1105,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                         color = MekanikBrandOrange.copy(alpha = 0.16f)
                                     ) {
                                         Text(
-                                            text = "Passerelle SMS Active",
+                                            text = "Passerelle SMS Privée",
                                             color = MekanikBrandOrange,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 9.5.sp,
@@ -1181,9 +1138,8 @@ fun SuperAdminNoCodeApiVaultSection(
 
                                     Button(
                                         onClick = {
-                                            val generated = SuperAdminGlobalControlRegistry.sendNewSmsOtpToSuperAdminPhone(phoneInput)
+                                            SuperAdminGlobalControlRegistry.sendNewSmsOtpToSuperAdminPhone(phoneInput)
                                             smsDispatchedBannerVisible = true
-                                            smsCodeInput = generated
                                             totpErrorMessage = null
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = MekanikBrandOrange),
@@ -1199,45 +1155,12 @@ fun SuperAdminNoCodeApiVaultSection(
                                 }
 
                                 if (smsDispatchedBannerVisible) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MetalCard,
-                                        border = BorderStroke(1.dp, MekanikValidationGreen.copy(alpha = 0.5f)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(10.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = SuperAdminGlobalControlRegistry.smsSentNotificationText,
-                                                    color = OffWhite,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                                Text(
-                                                    text = "Code SMS reçu : ${activeSmsCode.take(3)} ${activeSmsCode.takeLast(3)}",
-                                                    color = MekanikValidationGreen,
-                                                    fontWeight = FontWeight.Black,
-                                                    fontSize = 15.sp,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
-                                            }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    smsCodeInput = activeSmsCode
-                                                    totpErrorMessage = null
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                border = BorderStroke(1.dp, MekanikBrandOrange),
-                                                modifier = Modifier.testTag("btn_autofill_superadmin_sms")
-                                            ) {
-                                                Text("Copier SMS", color = MekanikBrandOrange, fontWeight = FontWeight.Bold, fontSize = 10.5.sp)
-                                            }
-                                        }
-                                    }
+                                    Text(
+                                        text = SuperAdminGlobalControlRegistry.smsSentNotificationText,
+                                        color = MekanikValidationGreen,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -1248,8 +1171,8 @@ fun SuperAdminNoCodeApiVaultSection(
                                 smsCodeInput = it.filter { ch -> ch.isDigit() }.take(6)
                                 totpErrorMessage = null
                             },
-                            label = { Text("2. Code SMS à 6 chiffres reçu sur votre téléphone ($phoneInput)") },
-                            placeholder = { Text("Ex: $activeSmsCode") },
+                            label = { Text("2. Code SMS à 6 chiffres reçu sur votre téléphone") },
+                            placeholder = { Text("••••••") },
                             leadingIcon = { Icon(Icons.Default.Sms, contentDescription = null, tint = MekanikBrandOrange) },
                             singleLine = true,
                             modifier = Modifier
@@ -1288,9 +1211,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                     )
                                     Button(
                                         onClick = {
-                                            val (pwd, code) = SuperAdminGlobalControlRegistry.sendEmailPasswordAndOtpToSuperAdmin()
-                                            emailPasswordInput = pwd
-                                            emailCodeInput = code
+                                            SuperAdminGlobalControlRegistry.sendEmailPasswordAndOtpToSuperAdmin()
                                             totpErrorMessage = null
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = TechCyan),
@@ -1354,31 +1275,6 @@ fun SuperAdminNoCodeApiVaultSection(
                             }
                         }
 
-                        // Bouton 1-clic pour remplir simultanément Google Authenticator + SMS + Code Email badroumc@gmail.com
-                        OutlinedButton(
-                            onClick = {
-                                totpCodeInput = liveSuperAdminTotpCode
-                                smsCodeInput = activeSmsCode
-                                emailPasswordInput = activeEmailPwd
-                                emailCodeInput = activeEmailCode
-                                totpErrorMessage = null
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, TechCyan),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("btn_autofill_both_2fa_and_sms")
-                        ) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, tint = TechCyan, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Remplir Google ($liveSuperAdminTotpCode) + SMS ($activeSmsCode) + Email badroumc@gmail.com ($activeEmailCode)",
-                                color = TechCyan,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.5.sp
-                            )
-                        }
-
                         totpErrorMessage?.let { err ->
                             Text(
                                 text = err,
@@ -1402,13 +1298,13 @@ fun SuperAdminNoCodeApiVaultSection(
                                 )
                                 when {
                                     !totpOk -> {
-                                        totpErrorMessage = "❌ Code Google Authenticator invalide. Code actif : $liveSuperAdminTotpCode"
+                                        totpErrorMessage = "❌ Code Google Authenticator invalide."
                                     }
                                     !smsOk -> {
-                                        totpErrorMessage = "❌ Code SMS téléphone invalide. Code SMS reçu : $activeSmsCode"
+                                        totpErrorMessage = "❌ Code SMS téléphone invalide."
                                     }
                                     !emailOk -> {
-                                        totpErrorMessage = "❌ Mot de passe ou Code Email (badroumc@gmail.com) invalide. Attendu : $activeEmailPwd / $activeEmailCode"
+                                        totpErrorMessage = "❌ Mot de passe ou Code Email (badroumc@gmail.com) invalide."
                                     }
                                     else -> {
                                         is2FaAndSmsVerified = true
