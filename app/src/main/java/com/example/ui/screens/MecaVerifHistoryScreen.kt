@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.ui.components.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -603,6 +604,8 @@ fun MecaVerifHistoryScreen(
   var unlockedVins by remember { mutableStateOf(emptySet<String>()) }
   var paidPerVinReceipts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
   var showPaymentUnlockModal by remember { mutableStateOf(false) }
+  var showReceiptsLedgerModal by remember { mutableStateOf(false) }
+  var initialGatewayChannel by remember { mutableStateOf(MecaVerifGatewayChannel.SATIM_CIB) }
   var selectedPricingPlan by remember(isProAccount) {
     mutableStateOf(
       if (isProAccount) MecaVerifRepository.pricingPlans[1] // 250 DA Pro
@@ -800,6 +803,25 @@ fun MecaVerifHistoryScreen(
           }
         }
       }
+    }
+
+    // 1.5. COMPOSANT DE PAIEMENT SÉCURISÉ MÉCAVERIF+™ (CIB SATIM, EDAHABIA, BARIDIMOB QR, CHARGILY PAY & STRIPE)
+    item {
+      MecaVerifSecurePaymentSummaryBanner(
+        currentVin = currentReport.vin,
+        isCurrentVinUnlocked = isReportUnlocked,
+        defaultPriceDzd = perVinPriceDzd,
+        unlockedCount = unlockedVins.size,
+        onOpenSecureCheckout = { channel ->
+          if (channel != null) {
+            initialGatewayChannel = channel
+          }
+          showPaymentUnlockModal = true
+        },
+        onOpenReceiptsHistory = {
+          showReceiptsLedgerModal = true
+        }
+      )
     }
 
     // 2. ÉTAPE 1 : SAISIE DU NUMÉRO DE CHÂSSIS (VIN) & KILOMÉTRAGE ACTUEL
@@ -1714,206 +1736,34 @@ fun MecaVerifHistoryScreen(
     )
   }
 
-  // Passerelle de Paiement Externe par Châssis (250 DA ou 300 DA / VIN)
+  // Passerelle de Paiement Sécurisé Externe par Châssis (250 DA ou 300 DA / VIN • CIB SATIM, Edahabia, BaridiMob, Chargily Pay & Stripe)
   if (showPaymentUnlockModal) {
-    Dialog(
-      onDismissRequest = { showPaymentUnlockModal = false },
-      properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-      Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MetalCard,
-        border = BorderStroke(1.5.dp, MekanikBrandOrange),
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(14.dp)
-          .testTag("mecaverif_payment_modal")
-      ) {
-        Column(
-          modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(18.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = "PAIEMENT PAR CHÂSSIS • MÉCAVERIF+™",
-                color = OffWhite,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 15.sp
-              )
-              Text(
-                text = "Service externe hors abonnement • Châssis : ${currentReport.vin}",
-                color = MekanikBrandOrange,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
-              )
-            }
-            IconButton(onClick = { showPaymentUnlockModal = false }) {
-              Icon(Icons.Default.Close, contentDescription = "Fermer", tint = OffWhite)
-            }
-          }
+    MecaVerifSecureCheckoutModal(
+      vin = currentReport.vin,
+      vehicleTitle = currentReport.vehicleTitle,
+      isProAccount = isProAccount,
+      initialChannel = initialGatewayChannel,
+      onPaymentCompleted = { receipt ->
+        generatedCertificateNumber = receipt.receiptId
+        triggerReportGenerationAfterPayment(receipt.amountDzd)
+      },
+      onDismiss = { showPaymentUnlockModal = false }
+    )
+  }
 
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = GraphiteDark,
-            border = BorderStroke(1.dp, MekanikBrandOrange.copy(alpha = 0.55f)),
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            Text(
-              text = "IMPORTANT : MécaVerif+™ (VerifyCar) n'est pas un abonnement et n'est pas inclus dans les abonnements des autres comptes. Vous payez uniquement 250 DA ou 300 DA par numéro de châssis à chaque consultation d'historique.",
-              color = OffWhite,
-              fontSize = 10.5.sp,
-              lineHeight = 14.5.sp,
-              modifier = Modifier.padding(10.dp)
-            )
-          }
-
-          Text(
-            text = "1. TARIF À L'ACTE PAR NUMÉRO DE CHÂSSIS (VIN) :",
-            color = AluminumGray,
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.5.sp
-          )
-
-          MecaVerifRepository.pricingPlans.forEach { plan ->
-            val isSelected = selectedPricingPlan.id == plan.id
-            Surface(
-              shape = RoundedCornerShape(11.dp),
-              color = if (isSelected) MekanikBrandOrange.copy(alpha = 0.14f) else GraphiteDark,
-              border = BorderStroke(
-                1.2.dp,
-                if (isSelected) MekanikBrandOrange else MetalBorder
-              ),
-              onClick = { selectedPricingPlan = plan },
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                  ) {
-                    Text(
-                      text = plan.title,
-                      color = OffWhite,
-                      fontWeight = FontWeight.Bold,
-                      fontSize = 12.sp
-                    )
-                    Surface(
-                      shape = RoundedCornerShape(5.dp),
-                      color = MekanikBrandOrange.copy(alpha = 0.2f)
-                    ) {
-                      Text(
-                        text = plan.badge,
-                        color = MekanikBrandOrange,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 8.5.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                      )
-                    }
-                  }
-                  Text(
-                    text = plan.description,
-                    color = AluminumGray,
-                    fontSize = 10.sp
-                  )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                  Text(
-                    text = "${plan.priceDzd} DA",
-                    color = MekanikValidationGreen,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
-                  )
-                  Text(
-                    text = "par VIN",
-                    color = AluminumGray,
-                    fontSize = 9.5.sp
-                  )
-                }
-              }
-            }
-          }
-
-          Text(
-            text = "2. MODE DE PAIEMENT SÉCURISÉ :",
-            color = AluminumGray,
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.5.sp
-          )
-
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            MecaVerifPaymentMethod.entries.forEach { method ->
-              val isSelected = selectedPaymentMethod == method
-              Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = if (isSelected) MekanikBrandOrange else GraphiteDark,
-                border = BorderStroke(
-                  1.dp,
-                  if (isSelected) MekanikBrandOrange else MetalBorder
-                ),
-                onClick = { selectedPaymentMethod = method }
-              ) {
-                Column(
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                  Text(
-                    text = method.label,
-                    color = if (isSelected) Color.White else OffWhite,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.5.sp
-                  )
-                  Text(
-                    text = method.subtitle,
-                    color = if (isSelected) Color.White.copy(alpha = 0.85f) else AluminumGray,
-                    fontSize = 9.5.sp
-                  )
-                }
-              }
-            }
-          }
-
-          Button(
-            onClick = {
-              triggerReportGenerationAfterPayment(selectedPricingPlan.priceDzd)
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-              containerColor = MekanikBrandOrange,
-              contentColor = Color.White
-            ),
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(52.dp)
-              .testTag("btn_confirm_mecaverif_payment")
-          ) {
-            Icon(imageVector = Icons.Default.Verified, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = "Payer ${selectedPricingPlan.priceDzd} DA (${selectedPaymentMethod.badge}) pour le VIN ${currentReport.vin}",
-              fontWeight = FontWeight.ExtraBold,
-              fontSize = 12.sp
-            )
-          }
-        }
-      }
-    }
+  // Journal des Reçus Fiscaux & Historique des Achats Unitaires MécaVerif+™
+  if (showReceiptsLedgerModal) {
+    MecaVerifReceiptsLedgerModal(
+      onSelectUnlockedVin = { targetVin ->
+        showReceiptsLedgerModal = false
+        vinQuery = targetVin
+        val rep = MecaVerifRepository.findOrBuildReport(targetVin)
+        currentReport = rep
+        currentDashboardKmText = rep.defaultDashboardOdometerKm.toString()
+        unlockedVins = unlockedVins + targetVin
+      },
+      onDismiss = { showReceiptsLedgerModal = false }
+    )
   }
 }
 

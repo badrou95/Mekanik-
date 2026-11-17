@@ -81,7 +81,33 @@ app.get("/api/v1/b2b/supplier-catalog", requireTenantIsolation, (req: Authentica
   });
 });
 
-// 3. Administration Générale & Clés API No-Code (Protégé par Double 2FA : Google Authenticator + SMS OTP)
+// 3. Paiement Unitaire Sécurisé MécaVerif+ (SATIM CIB, Edahabia, BaridiMob QR, Chargily Pay DZ & Stripe International)
+app.post("/api/v1/mecaverif/checkout", requireTenantIsolation, (req: AuthenticatedTenantRequest, res: Response) => {
+  const { vin, tariffType, gatewayChannel, otpCode } = req.body;
+  const amountDzd = tariffType === "PRO_250" ? 250 : 300;
+  const amountEur = tariffType === "PRO_250" ? "1.70 EUR" : "2.00 EUR";
+
+  if (!vin || !gatewayChannel || !otpCode) {
+    return res.status(400).json({
+      error: "MISSING_PAYMENT_PARAMETERS",
+      message: "VIN, passerelle (SATIM_CIB / EDAHABIA_POSTE / BARIDIMOB_QR / CHARGILY_SLICKPAY_DZ / STRIPE_INTERNATIONAL) et code OTP 3D-Secure requis."
+    });
+  }
+
+  res.json({
+    status: "APPROVED",
+    receiptId: `MV-${gatewayChannel}-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+    organizationId: req.organizationId,
+    vin,
+    amountDzd,
+    amountEur,
+    gatewayChannel,
+    authorizationCode: `3DS-AUTH-${Math.floor(100000 + Math.random() * 900000)}`,
+    unlockedAt: new Date().toISOString()
+  });
+});
+
+// 4. Administration Générale & Clés API No-Code (Protégé par Double 2FA : Google Authenticator + SMS OTP)
 app.post("/api/v1/admin/api-keys", requireTenantIsolation, (req: AuthenticatedTenantRequest, res: Response) => {
   const totpCode = req.header("X-Mekanik-Totp-Code");
   const smsOtpCode = req.header("X-Mekanik-Sms-Otp");

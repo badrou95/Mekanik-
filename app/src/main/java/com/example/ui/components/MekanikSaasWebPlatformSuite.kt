@@ -1756,6 +1756,11 @@ private fun SaasUserSpaceView(
     onNavigateToSpace: (SaasSpace) -> Unit,
     onShowToast: (String) -> Unit
 ) {
+    var showInlineMecaVerifCheckout by remember { mutableStateOf(false) }
+    var showInlineReceiptsLedger by remember { mutableStateOf(false) }
+    var selectedCheckoutChannel by remember { mutableStateOf(MecaVerifGatewayChannel.SATIM_CIB) }
+    var unlockedSaasVin by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1797,14 +1802,14 @@ private fun SaasUserSpaceView(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = onOpenMecaVerif,
+                            onClick = { showInlineMecaVerifCheckout = true },
                             colors = ButtonDefaults.buttonColors(containerColor = SaasOrange),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Verified, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Rapport MécaVerif+ (250/300 DA)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("Acheter Rapport MécaVerif+ (250/300 DA)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                         OutlinedButton(
                             onClick = { onNavigateToSpace(SaasSpace.SITE_PUBLIC) },
@@ -1817,6 +1822,25 @@ private fun SaasUserSpaceView(
                     }
                 }
             }
+        }
+
+        // Passerelle de Paiement Sécurisé MécaVerif+™ intégrée dans l'Espace Utilisateur SaaS
+        item {
+            MecaVerifSecurePaymentSummaryBanner(
+                currentVin = "WVWZZZAUZHW129834",
+                isCurrentVinUnlocked = unlockedSaasVin,
+                defaultPriceDzd = if (activeOrg.orgType == "PARTICULIER") 300 else 250,
+                unlockedCount = MecaVerifPaymentLedger.transactions.size,
+                onOpenSecureCheckout = { channel ->
+                    if (channel != null) {
+                        selectedCheckoutChannel = channel
+                    }
+                    showInlineMecaVerifCheckout = true
+                },
+                onOpenReceiptsHistory = {
+                    showInlineReceiptsLedger = true
+                }
+            )
         }
 
         // Véhicules récents, Alertes & Entretiens
@@ -1873,6 +1897,32 @@ private fun SaasUserSpaceView(
                 }
             }
         }
+    }
+
+    if (showInlineMecaVerifCheckout) {
+        MecaVerifSecureCheckoutModal(
+            vin = "WVWZZZAUZHW129834",
+            vehicleTitle = "Volkswagen Golf 7 2.0 TDI 150ch (2019)",
+            isProAccount = activeOrg.orgType != "PARTICULIER",
+            initialChannel = selectedCheckoutChannel,
+            onPaymentCompleted = { receipt ->
+                unlockedSaasVin = true
+                showInlineMecaVerifCheckout = false
+                onShowToast("Reçu ${receipt.receiptId} validé (${receipt.amountDzd} DA) • Ouverture du rapport MécaVerif+...")
+                onOpenMecaVerif()
+            },
+            onDismiss = { showInlineMecaVerifCheckout = false }
+        )
+    }
+
+    if (showInlineReceiptsLedger) {
+        MecaVerifReceiptsLedgerModal(
+            onSelectUnlockedVin = {
+                showInlineReceiptsLedger = false
+                onOpenMecaVerif()
+            },
+            onDismiss = { showInlineReceiptsLedger = false }
+        )
     }
 }
 
