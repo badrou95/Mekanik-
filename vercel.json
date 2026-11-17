@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd web-saas-platform && npm install && npm run build",
+  "outputDirectory": "web-saas-platform/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
