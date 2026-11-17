@@ -248,13 +248,13 @@ fun SuperAdminPortalModal(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                       Text(
-                        text = "CONNEXION SUPER-ADMIN (2FA GOOGLE AUTHENTICATOR + SMS)",
+                        text = "CONNEXION SUPER-ADMIN UNIQUE : badroumc@gmail.com (GOOGLE 2FA + SMS + EMAIL)",
                         color = PureWhite,
                         fontWeight = FontWeight.Black,
                         fontSize = 14.5.sp
                       )
                       Text(
-                        text = "Accès sécurisé aux clés TecDoc, ETKA, Groupe Stellantis, Lecture Châssis VIN, TikTok & Sous-Comptes",
+                        text = "Prix des abonnements, confirmation des paiements, validation des comptes et ajout/modification d'APIs (TecDoc, ETKA, Stellantis, VIN, Autodata, SATIM, Stripe)",
                         color = AluminumGray,
                         fontSize = 11.5.sp
                       )
@@ -659,7 +659,7 @@ fun SuperAdminPortalModal(
               modifier = Modifier.testTag("tab_super_admin_nocode_apis_2fa"),
               text = {
                 Text(
-                  "🔌 Clés TecDoc, ETKA, Stellantis, VIN, TikTok & Sous-Comptes (2FA+SMS)",
+                  "🔌 Prix Abonnements, Multi-APIs (TecDoc/ETKA/Stellantis/VIN) & Sous-Comptes (badroumc@gmail.com)",
                   fontWeight = FontWeight.Black,
                   fontSize = 11.5.sp,
                   color = if (selectedTab == 7) ElectricGreen else PureWhite
@@ -1223,7 +1223,7 @@ fun SuperAdminPortalModal(
             }
 
             7 -> {
-              // TAB 7: GESTIONNAIRE D'APIS SANS CODE (TIKTOK & EXTERNES) • RÉSERVÉ SUPER-ADMIN + 2FA GOOGLE AUTHENTICATOR
+              // TAB 7: GESTIONNAIRE MULTI-API SANS CODE, PRIX ABONNEMENTS & SOUS-COMPTES • RÉSERVÉ À badroumc@gmail.com
               SuperAdminNoCodeApiVaultSection(
                 isSuperAdminRootOperator = adminSession.activeStaffOperator == null,
                 superAdminEmail = adminSession.adminEmail

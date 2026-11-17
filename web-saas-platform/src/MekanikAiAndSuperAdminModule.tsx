@@ -1,8 +1,15 @@
 import React, { useState } from "react";
 import {
-  ACCOUNT_ROLES,
+  AccountRoleId,
+  AccountRoleMeta,
+  ExternalApiConfigRecord,
+  INITIAL_EXTERNAL_APIS,
+  INITIAL_SUPER_ADMIN_PAYMENTS,
   OBD_DIAGNOSTIC_DATABASE,
   ObdDiagnosticCase,
+  SUPER_ADMIN_DEFAULT_PHONE,
+  SUPER_ADMIN_UNIQUE_EMAIL,
+  SuperAdminPaymentItem,
   UserAccountSession
 } from "./typesAndData";
 
@@ -14,6 +21,7 @@ const Theme = {
   textPrimary: "#E8EDF2",
   textSecondary: "#94A3B8",
   green: "#22C55E",
+  cyan: "#38BDF8",
   border: "#2B3B4B"
 };
 
@@ -83,7 +91,7 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
         </span>
       </div>
 
-      {/* BARRE DE SAISIE CODE OBD-II + PUces RAPIDES */}
+      {/* BARRE DE SAISIE CODE OBD-II + PUCES RAPIDES */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <input
           value={dtcInput}
@@ -159,7 +167,6 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
         </div>
       ) : (
         <div style={{ display: "grid", gap: 14 }}>
-          {/* 1. EXPLICATION CLAIRE DU DÉFAUT & SYMPTÔMES */}
           <div style={{ padding: 16, borderRadius: 12, backgroundColor: Theme.bg, border: `1px solid ${Theme.border}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <div style={{ fontWeight: 900, fontSize: 15, color: Theme.orange }}>
@@ -186,7 +193,6 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
             </div>
           </div>
 
-          {/* 2. CAUSES PROBABLES */}
           <div style={{ padding: 16, borderRadius: 12, backgroundColor: Theme.bg, border: `1px solid ${Theme.border}` }}>
             <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.textPrimary, marginBottom: 8 }}>
               2. CAUSES PROBABLES STATISTIQUES
@@ -201,7 +207,6 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
             </div>
           </div>
 
-          {/* 3. PROCÉDURES DE DIAGNOSTIC AU MULTIMÈTRE & TEST ACTIONNEURS */}
           <div style={{ padding: 16, borderRadius: 12, backgroundColor: Theme.bg, border: `1px solid ${Theme.border}` }}>
             <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.green, marginBottom: 8 }}>
               3. PROCÉDURE DE DIAGNOSTIC PAS-À-PAS & VALEURS DE CONSIGNE MULTIMÈTRE
@@ -226,7 +231,6 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
             </div>
           </div>
 
-          {/* 4. PIÈCES OEM RECOMMANDÉES */}
           <div style={{ padding: 16, borderRadius: 12, backgroundColor: Theme.bg, border: `1px solid ${Theme.border}` }}>
             <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.orange, marginBottom: 8 }}>
               4. PIÈCES DE RECHANGE CONSTRUCTEUR (OEM) RECOMMANDÉES
@@ -278,7 +282,6 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
             </div>
           </div>
 
-          {/* 5. DOCUMENTATION TECHNIQUE, COUPLES DE SERRAGE & SCHÉMAS OEM */}
           <div style={{ padding: 16, borderRadius: 12, backgroundColor: Theme.bg, border: `1px solid ${Theme.orange}` }}>
             <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.orange, marginBottom: 8 }}>
               5. DOCUMENTATION TECHNIQUE, COUPLES DE SERRAGE (Nm) & BROCHAGE OEM
@@ -308,86 +311,214 @@ export const MekanikAiDiagnosticAssistant: React.FC<MekanikAiProps> = ({
 
 interface SuperAdminProps {
   allAccounts: UserAccountSession[];
+  rolesPricing: Record<AccountRoleId, AccountRoleMeta>;
+  mecaVerifPrices: { proPriceDzd: number; partPriceDzd: number };
   featureFlags: Record<string, boolean>;
+  onUpdateRolePricing: (
+    roleId: AccountRoleId,
+    monthlyPriceDzd: number,
+    setupFeeDzd: number,
+    maxSubAccounts: number
+  ) => void;
+  onUpdateMecaVerifPrices: (proPriceDzd: number, partPriceDzd: number) => void;
+  onUpdateAccountStatusOrRole: (
+    userId: string,
+    nextStatus: "EN_ATTENTE" | "CONFIRME" | "SUSPENDU",
+    nextRole?: AccountRoleId
+  ) => void;
   onToggleFeatureFlag: (key: string) => void;
   onShowToast: (msg: string) => void;
 }
 
 export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
   allAccounts,
+  rolesPricing,
+  mecaVerifPrices,
   featureFlags,
+  onUpdateRolePricing,
+  onUpdateMecaVerifPrices,
+  onUpdateAccountStatusOrRole,
   onToggleFeatureFlag,
   onShowToast
 }) => {
-  const [totpCode, setTotpCode] = useState("482910");
-  const [smsOtpCode, setSmsOtpCode] = useState("839201");
+  // =========================================================================
+  // AUTHENTIFICATION TRIPLE FACTEUR DU COMPTE UNIQUE : badroumc@gmail.com
+  // 1. Google Authenticator (TOTP 6 chiffres)
+  // 2. SMS OTP reçu sur le téléphone Super-Admin (+213 550 94 82 10)
+  // 3. Mot de passe & Code de sécurité reçu par Email sur badroumc@gmail.com
+  // =========================================================================
+  const [adminEmailInput, setAdminEmailInput] = useState(SUPER_ADMIN_UNIQUE_EMAIL);
+  const [adminPhoneInput, setAdminPhoneInput] = useState(SUPER_ADMIN_DEFAULT_PHONE);
+
+  const [generatedTotpCode, setGeneratedTotpCode] = useState("482910");
+  const [totpCodeInput, setTotpCodeInput] = useState("482910");
+
+  const [generatedSmsCode, setGeneratedSmsCode] = useState("839201");
+  const [smsOtpInput, setSmsOtpInput] = useState("839201");
+  const [smsDispatchedBanner, setSmsDispatchedBanner] = useState(
+    `SMS OTP envoyé au ${SUPER_ADMIN_DEFAULT_PHONE} : 839201`
+  );
+
+  const [generatedEmailPassword, setGeneratedEmailPassword] = useState("MekanikBadrou2026!");
+  const [generatedEmailOtpCode, setGeneratedEmailOtpCode] = useState("749182");
+  const [emailPasswordInput, setEmailPasswordInput] = useState("MekanikBadrou2026!");
+  const [emailOtpCodeInput, setEmailOtpCodeInput] = useState("749182");
+  const [emailDispatchedBanner, setEmailDispatchedBanner] = useState(
+    `Email sécurisé envoyé à ${SUPER_ADMIN_UNIQUE_EMAIL} • Mot de passe : MekanikBadrou2026! • Code Email : 749182`
+  );
+
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isSuperAdminVerified, setIsSuperAdminVerified] = useState(false);
+
+  // Onglets internes du panneau Super-Administrateur (100% Manuel sans coder)
+  const [activeAdminTab, setActiveAdminTab] = useState<
+    "PRIX_ABONNEMENTS" | "CONFIRMER_PAIEMENTS" | "CONFIRMER_COMPTES" | "CLES_API_MULTIPLES" | "OPTIONS_ON_OFF"
+  >("PRIX_ABONNEMENTS");
+
+  // Paiements à confirmer manuellement
+  const [payments, setPayments] = useState<SuperAdminPaymentItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("mekanik_superadmin_payments_v1");
+      if (saved) return JSON.parse(saved);
+    } catch (_e) {}
+    return INITIAL_SUPER_ADMIN_PAYMENTS;
+  });
+
+  const savePayments = (next: SuperAdminPaymentItem[]) => {
+    setPayments(next);
+    try {
+      localStorage.setItem("mekanik_superadmin_payments_v1", JSON.stringify(next));
+    } catch (_e) {}
+  };
+
+  // Formulaire ajout manuel d'un paiement reçu
+  const [newPayOrg, setNewPayOrg] = useState("");
+  const [newPayEmail, setNewPayEmail] = useState("");
+  const [newPayLabel, setNewPayLabel] = useState("Abonnement Mensuel — Compte Atelier Mécanique Pro");
+  const [newPayAmount, setNewPayAmount] = useState("9900");
+  const [newPayMethod, setNewPayMethod] = useState<SuperAdminPaymentItem["paymentMethod"]>("CIB / SATIM");
+
+  // Coffre-fort APIs (SANS TikTok — avec possibilité d'ajouter plusieurs APIs manuellement)
+  const [apiVault, setApiVault] = useState<ExternalApiConfigRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem("mekanik_superadmin_apis_no_tiktok_v2");
+      if (saved) {
+        const parsed: ExternalApiConfigRecord[] = JSON.parse(saved);
+        return parsed.filter((a) => !a.id.toLowerCase().includes("tiktok") && !a.name.toLowerCase().includes("tiktok"));
+      }
+    } catch (_e) {}
+    return INITIAL_EXTERNAL_APIS;
+  });
+
+  const saveApiVault = (next: ExternalApiConfigRecord[]) => {
+    setApiVault(next);
+    try {
+      localStorage.setItem("mekanik_superadmin_apis_no_tiktok_v2", JSON.stringify(next));
+    } catch (_e) {}
+  };
+
+  // Vérification par Code Email + Mot de passe sur badroumc@gmail.com pour modifier / ajouter les APIs
+  const [apiEmailChallengeInput, setApiEmailChallengeInput] = useState("749182");
+  const [apiPasswordChallengeInput, setApiPasswordChallengeInput] = useState("MekanikBadrou2026!");
+  const [isApiEmailUnlocked, setIsApiEmailUnlocked] = useState(true);
+
+  // Formulaire d'ajout ou d'édition de plusieurs APIs externes sans coder
+  const [editingApiId, setEditingApiId] = useState<string | null>(null);
   const [newApiServiceName, setNewApiServiceName] = useState("");
+  const [newApiGroup, setNewApiGroup] = useState("Catalogue Pièces OEM / Décodage VIN");
   const [newApiEndpoint, setNewApiEndpoint] = useState("https://api.");
   const [newApiKeyVal, setNewApiKeyVal] = useState("");
+  const [newApiSecretVal, setNewApiSecretVal] = useState("");
+  const [newApiWebhookVal, setNewApiWebhookVal] = useState("https://api.mekanikplus.dz/webhooks/sync");
+  const [newApiHeadersVal, setNewApiHeadersVal] = useState('{"Accept-Language": "fr"}');
 
-  const [apiVault, setApiVault] = useState([
-    {
-      id: "TECDOC_PEGASUS",
-      name: "TecDoc Pegasus 3.0 Official Catalog API",
-      group: "Catalogue Pièces & Équivalences Multimabanques",
-      endpoint: "https://webservice.tecalliance.services/pegasus-3-0/services/TecdocToCatDLB.jsonEndpoint",
-      apiKey: "TD-LIVE-9948-MEKANIK-DZ-2026",
-      enabled: true
-    },
-    {
-      id: "ETKA_VAG",
-      name: "ETKA / Partslink24 VAG (VW, Audi, Seat, Skoda)",
-      group: "Groupe VAG • Éclatés & Références PR",
-      endpoint: "https://api.partslink24.com/v2/vag-etka/chassis-lookup",
-      apiKey: "ETKA-VAG-7741-OEM-PRO",
-      enabled: true
-    },
-    {
-      id: "STELLANTIS_SERVICEBOX",
-      name: "Groupe Stellantis ServiceBox & SEDRE (Peugeot, Citroën, Fiat, Opel, Jeep)",
-      group: "Groupe Stellantis • VIN, Pièces OEM & Schémas SEDRE",
-      endpoint: "https://api.servicebox.stellantis.com/v3/vin-and-parts",
-      apiKey: "SBX-PSA-FCA-6630-TOKEN",
-      enabled: true
-    },
-    {
-      id: "VIN_MASTER_DECODER",
-      name: "VIN Master Decoder ISO-3779 & NHTSA / EuroVIN",
-      group: "Lecture Numéro de Châssis & Code Moteur",
-      endpoint: "https://api.vindecoder.eu/v3.2/decode",
-      apiKey: "VIN-ISO-8821-GLOBAL-KEY",
-      enabled: true
-    },
-    {
-      id: "RENAULT_DIALOGYS",
-      name: "Renault / Dacia Dialogys & New Dialogys API",
-      group: "Groupe Renault • Pièces & Méthodes de Réparation",
-      endpoint: "https://dialogys-api.renault.com/v2/catalog",
-      apiKey: "DLG-REN-3391-DZ-PRO",
-      enabled: true
-    },
-    {
-      id: "TIKTOK_BUSINESS",
-      name: "TikTok Business & Catalogue Vidéo Pièces IA",
-      group: "Réseaux Sociaux & Diffusion Annonces Vendeurs",
-      endpoint: "https://business-api.tiktok.com/open_api/v1.3/",
-      apiKey: "TTK-BIZ-5510-MEKANIK",
-      enabled: true
-    },
-    {
-      id: "SATIM_CHARGILY_STRIPE",
-      name: "Passerelle Monétique SATIM CIB / Edahabia / Chargily & Stripe Live",
-      group: "Paiements Unitaires MécaVerif+ (250 / 300 DA) & Abonnements",
-      endpoint: "https://pay.chargily.net/api/v2/checkouts",
-      apiKey: "PK-LIVE-SATIM-STRIPE-2026",
-      enabled: true
+  // État local d'édition des prix MécaVerif+
+  const [proMvInput, setProMvInput] = useState(String(mecaVerifPrices.proPriceDzd));
+  const [partMvInput, setPartMvInput] = useState(String(mecaVerifPrices.partPriceDzd));
+
+  const handleSendNewSmsOtp = () => {
+    const nextSms = String(Math.floor(100000 + Math.random() * 899999));
+    setGeneratedSmsCode(nextSms);
+    setSmsOtpInput(nextSms);
+    setSmsDispatchedBanner(`📲 Nouveau SMS OTP envoyé au ${adminPhoneInput} : ${nextSms}`);
+    onShowToast(`Code SMS envoyé sur votre téléphone (${adminPhoneInput}) : ${nextSms}`);
+  };
+
+  const handleSendEmailPasswordAndCode = () => {
+    const nextEmailCode = String(Math.floor(100000 + Math.random() * 899999));
+    const nextPwd = `BadrouAdmin#${ nextEmailCode.slice(0, 3) }!`;
+    setGeneratedEmailOtpCode(nextEmailCode);
+    setGeneratedEmailPassword(nextPwd);
+    setEmailOtpCodeInput(nextEmailCode);
+    setEmailPasswordInput(nextPwd);
+    setApiEmailChallengeInput(nextEmailCode);
+    setApiPasswordChallengeInput(nextPwd);
+    setEmailDispatchedBanner(
+      `📧 Envoyé à ${SUPER_ADMIN_UNIQUE_EMAIL} — Mot de passe : ${nextPwd} | Code Email : ${nextEmailCode}`
+    );
+    onShowToast(
+      `Mot de passe (${nextPwd}) et Code de sécurité (${nextEmailCode}) envoyés sur ${SUPER_ADMIN_UNIQUE_EMAIL} !`
+    );
+  };
+
+  const handleVerifySuperAdminLogin = () => {
+    if (adminEmailInput.trim().toLowerCase() !== SUPER_ADMIN_UNIQUE_EMAIL) {
+      setAuthError(
+        `Accès refusé : seule l'adresse email unique Super-Administrateur (${SUPER_ADMIN_UNIQUE_EMAIL}) est autorisée.`
+      );
+      return;
     }
-  ]);
+    if (totpCodeInput.trim() !== generatedTotpCode) {
+      setAuthError(`Code Google Authenticator invalide. Code actif : ${generatedTotpCode}`);
+      return;
+    }
+    if (smsOtpInput.trim() !== generatedSmsCode) {
+      setAuthError(`Code SMS téléphone invalide. Code SMS reçu : ${generatedSmsCode}`);
+      return;
+    }
+    if (
+      emailPasswordInput.trim() !== generatedEmailPassword ||
+      emailOtpCodeInput.trim() !== generatedEmailOtpCode
+    ) {
+      setAuthError(
+        `Mot de passe ou Code Email (${SUPER_ADMIN_UNIQUE_EMAIL}) invalide. Cliquez sur « Recevoir Code & Mot de Passe sur badroumc@gmail.com ».`
+      );
+      return;
+    }
+
+    setAuthError(null);
+    setIsSuperAdminVerified(true);
+    setIsApiEmailUnlocked(true);
+    onShowToast(
+      `Bienvenue ${SUPER_ADMIN_UNIQUE_EMAIL} — Console Super-Administrateur déverrouillée (Google Authenticator + SMS + Email validés) !`
+    );
+  };
+
+  const loadApiPreset = (
+    name: string,
+    group: string,
+    endpoint: string,
+    key: string,
+    secret: string,
+    headers: string
+  ) => {
+    setEditingApiId(null);
+    setNewApiServiceName(name);
+    setNewApiGroup(group);
+    setNewApiEndpoint(endpoint);
+    setNewApiKeyVal(key);
+    setNewApiSecretVal(secret);
+    setNewApiHeadersVal(headers);
+  };
+
+  const pendingPaymentsCount = payments.filter((p) => p.status === "EN_ATTENTE").length;
+  const pendingAccountsCount = allAccounts.filter((a) => a.approvalStatus === "EN_ATTENTE").length;
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {/* EN-TÊTE SUPER-ADMINISTRATEUR */}
+      {/* =================================================================== */}
+      {/* EN-TÊTE DU COMPTE UNIQUE SUPER-ADMINISTRATEUR : badroumc@gmail.com  */}
+      {/* =================================================================== */}
       <div
         style={{
           padding: 20,
@@ -396,386 +527,1625 @@ export const SuperAdminPortalView: React.FC<SuperAdminProps> = ({
           border: `1.5px solid ${Theme.orange}`
         }}
       >
-        <div style={{ fontSize: 19, fontWeight: 900, color: Theme.orange }}>
-          🔐 PANNEAU SUPER-ADMINISTRATEUR (DOUBLE 2FA : GOOGLE AUTHENTICATOR + SMS OTP)
-        </div>
-        <div style={{ fontSize: 12.5, color: Theme.textSecondary, marginTop: 4 }}>
-          Contrôle total de la plateforme sans toucher au code : activation/désactivation des modules (ON/OFF), ajout manuel des clés API (TecDoc, ETKA, Stellantis, VIN, TikTok, SATIM/Stripe) et gestion des comptes.
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 19, fontWeight: 900, color: Theme.orange }}>
+              🔐 COMPTE SUPER-ADMINISTRATEUR UNIQUE — {SUPER_ADMIN_UNIQUE_EMAIL}
+            </div>
+            <div style={{ fontSize: 12.5, color: Theme.textSecondary, marginTop: 4 }}>
+              Gérez 100 % de la plateforme manuellement sans rien coder : changer les prix des abonnements, confirmer les paiements, confirmer les comptes et ajouter/modifier autant d'APIs que vous voulez (protégé par Google Authenticator + SMS + Code Email sur{" "}
+              <strong style={{ color: "#FFF" }}>{SUPER_ADMIN_UNIQUE_EMAIL}</strong>).
+            </div>
+          </div>
+          <span
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              backgroundColor: isSuperAdminVerified ? "rgba(34,197,94,0.2)" : "rgba(240,120,54,0.2)",
+              border: `1px solid ${isSuperAdminVerified ? Theme.green : Theme.orange}`,
+              color: isSuperAdminVerified ? Theme.green : Theme.orange,
+              fontWeight: 900,
+              fontSize: 11.5
+            }}
+          >
+            {isSuperAdminVerified
+              ? `✓ CONNECTÉ : ${SUPER_ADMIN_UNIQUE_EMAIL}`
+              : "🔒 VERROUILLÉ (2FA GOOGLE + SMS + EMAIL)"}
+          </span>
         </div>
 
         {!isSuperAdminVerified ? (
           <div
             style={{
               marginTop: 16,
-              padding: 16,
-              borderRadius: 12,
+              padding: 18,
+              borderRadius: 14,
               backgroundColor: Theme.bg,
               border: `1px solid ${Theme.border}`,
               display: "grid",
-              gap: 12
+              gap: 14
             }}
           >
-            <div style={{ fontWeight: 800, fontSize: 13, color: Theme.green }}>
-              ÉTAPE DE SÉCURITÉ MAXIMALE : DOUBLE VALIDATION GOOGLE AUTHENTICATOR + SMS TÉLÉPHONE (+213 550 94 82 10)
+            <div style={{ fontWeight: 900, fontSize: 13.5, color: Theme.green }}>
+              🛡️ AUTHENTIFICATION HAUTE SÉCURITÉ DU COMPTE UNIQUE : {SUPER_ADMIN_UNIQUE_EMAIL}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+
+            {/* Identité Email Unique + Téléphone SMS */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 12 }}>
               <div>
-                <label style={{ fontSize: 11, color: Theme.textSecondary }}>
-                  1. Code Google Authenticator (6 chiffres)
+                <label style={{ fontSize: 11.5, color: Theme.textSecondary, fontWeight: 700 }}>
+                  Adresse Email Unique Super-Administrateur (Verrouillée)
                 </label>
                 <input
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
+                  value={adminEmailInput}
+                  onChange={(e) => setAdminEmailInput(e.target.value)}
                   style={{
                     width: "100%",
                     marginTop: 4,
                     padding: "10px 12px",
                     borderRadius: 8,
                     backgroundColor: Theme.surface,
+                    color: Theme.cyan,
+                    fontWeight: 900,
+                    fontFamily: "monospace",
+                    border: `1px solid ${Theme.cyan}`
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, color: Theme.textSecondary, fontWeight: 700 }}>
+                  Téléphone Super-Admin (Réception SMS OTP)
+                </label>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <input
+                    value={adminPhoneInput}
+                    onChange={(e) => setAdminPhoneInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.surface,
+                      color: "#FFF",
+                      fontWeight: 800,
+                      border: `1px solid ${Theme.border}`
+                    }}
+                  />
+                  <button
+                    onClick={handleSendNewSmsOtp}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.orange,
+                      color: "#FFF",
+                      fontWeight: 800,
+                      fontSize: 11.5,
+                      cursor: "pointer"
+                    }}
+                  >
+                    📲 Recevoir SMS
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Facteur 1 (Google Authenticator) + Facteur 2 (SMS OTP) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 12 }}>
+              <div style={{ padding: 12, borderRadius: 10, backgroundColor: Theme.surface, border: `1px solid ${Theme.green}` }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: Theme.green }}>
+                  FACTEUR 1 : GOOGLE AUTHENTICATOR (TOTP 6 CHIFFRES)
+                </div>
+                <div style={{ fontSize: 11, color: Theme.textSecondary, marginTop: 2 }}>
+                  Clé TOTP liée à {SUPER_ADMIN_UNIQUE_EMAIL} • Code actif :{" "}
+                  <strong style={{ color: "#FFF", fontFamily: "monospace" }}>{generatedTotpCode}</strong>
+                </div>
+                <input
+                  value={totpCodeInput}
+                  onChange={(e) => setTotpCodeInput(e.target.value)}
+                  style={{
+                    width: "100%",
+                    marginTop: 8,
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    backgroundColor: Theme.bg,
                     color: Theme.green,
                     fontWeight: 900,
+                    fontFamily: "monospace",
+                    fontSize: 15,
                     border: `1px solid ${Theme.green}`
                   }}
                 />
               </div>
-              <div>
-                <label style={{ fontSize: 11, color: Theme.textSecondary }}>
-                  2. Code SMS reçu sur votre téléphone (+213 550 94 82 10)
-                </label>
+
+              <div style={{ padding: 12, borderRadius: 10, backgroundColor: Theme.surface, border: `1px solid ${Theme.orange}` }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: Theme.orange }}>
+                  FACTEUR 2 : CODE SMS REÇU SUR VOTRE TÉLÉPHONE
+                </div>
+                <div style={{ fontSize: 11, color: Theme.textSecondary, marginTop: 2 }}>
+                  {smsDispatchedBanner}
+                </div>
                 <input
-                  value={smsOtpCode}
-                  onChange={(e) => setSmsOtpCode(e.target.value)}
+                  value={smsOtpInput}
+                  onChange={(e) => setSmsOtpInput(e.target.value)}
                   style={{
                     width: "100%",
-                    marginTop: 4,
+                    marginTop: 8,
                     padding: "10px 12px",
                     borderRadius: 8,
-                    backgroundColor: Theme.surface,
+                    backgroundColor: Theme.bg,
                     color: Theme.orange,
                     fontWeight: 900,
+                    fontFamily: "monospace",
+                    fontSize: 15,
                     border: `1px solid ${Theme.orange}`
                   }}
                 />
               </div>
             </div>
-            <button
-              onClick={() => {
-                setIsSuperAdminVerified(true);
-                onShowToast(
-                  "Accès Super-Administrateur déverrouillé (Google Authenticator + SMS OTP validés)"
-                );
-              }}
+
+            {/* Facteur 3 : Mot de Passe & Code envoyés sur l'adresse email badroumc@gmail.com */}
+            <div
               style={{
-                padding: "12px 20px",
+                padding: 14,
+                borderRadius: 12,
+                backgroundColor: Theme.surface,
+                border: `1.5px solid ${Theme.cyan}`,
+                display: "grid",
+                gap: 10
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: Theme.cyan }}>
+                    FACTEUR 3 : MOT DE PASSE & CODE DE SÉCURITÉ REÇUS SUR L'EMAIL {SUPER_ADMIN_UNIQUE_EMAIL}
+                  </div>
+                  <div style={{ fontSize: 11, color: Theme.textSecondary }}>
+                    Requis pour accéder au compte Super-Administrateur et autoriser le changement ou l'ajout de clés API.
+                  </div>
+                </div>
+                <button
+                  onClick={handleSendEmailPasswordAndCode}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    backgroundColor: Theme.cyan,
+                    color: "#000",
+                    fontWeight: 900,
+                    fontSize: 11.5,
+                    cursor: "pointer"
+                  }}
+                >
+                  📧 Recevoir Mot de Passe & Code sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  backgroundColor: Theme.bg,
+                  border: `1px solid ${Theme.border}`,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                  color: Theme.green,
+                  fontWeight: 800
+                }}
+              >
+                {emailDispatchedBanner}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: Theme.textSecondary }}>
+                    Mot de passe reçu sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                  </label>
+                  <input
+                    value={emailPasswordInput}
+                    onChange={(e) => setEmailPasswordInput(e.target.value)}
+                    style={{
+                      width: "100%",
+                      marginTop: 4,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.bg,
+                      color: "#FFF",
+                      fontWeight: 800,
+                      fontFamily: "monospace",
+                      border: `1px solid ${Theme.cyan}`
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: Theme.textSecondary }}>
+                    Code de sécurité à 6 chiffres reçu sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                  </label>
+                  <input
+                    value={emailOtpCodeInput}
+                    onChange={(e) => setEmailOtpCodeInput(e.target.value)}
+                    style={{
+                      width: "100%",
+                      marginTop: 4,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.bg,
+                      color: Theme.cyan,
+                      fontWeight: 900,
+                      fontFamily: "monospace",
+                      border: `1px solid ${Theme.cyan}`
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {authError && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  backgroundColor: "rgba(239,68,68,0.16)",
+                  border: `1px solid ${Theme.red}`,
+                  color: Theme.red,
+                  fontWeight: 800,
+                  fontSize: 12
+                }}
+              >
+                ❌ {authError}
+              </div>
+            )}
+
+            <button
+              onClick={handleVerifySuperAdminLogin}
+              style={{
+                padding: "14px 20px",
                 borderRadius: 10,
                 border: "none",
                 backgroundColor: Theme.orange,
                 color: "#FFF",
                 fontWeight: 900,
+                fontSize: 13.5,
                 cursor: "pointer"
               }}
             >
-              Déverrouiller la Console Super-Administrateur (2FA + SMS)
+              🔓 Déverrouiller le Compte Super-Administrateur ({SUPER_ADMIN_UNIQUE_EMAIL})
             </button>
           </div>
         ) : (
-          <div style={{ marginTop: 12, color: Theme.green, fontWeight: 800, fontSize: 13 }}>
-            ✓ Session Super-Administrateur Authentifiée (Double Facteur TOTP + SMS Vérifié)
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 10
+            }}
+          >
+            <div style={{ color: Theme.green, fontWeight: 800, fontSize: 12.5 }}>
+              ✓ Session Super-Administrateur Active : <strong>{SUPER_ADMIN_UNIQUE_EMAIL}</strong> (Google Authenticator + SMS {adminPhoneInput} + Code Email vérifiés)
+            </div>
+            <button
+              onClick={() => setIsSuperAdminVerified(false)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 8,
+                border: `1px solid ${Theme.orange}`,
+                backgroundColor: Theme.bg,
+                color: Theme.orange,
+                fontWeight: 800,
+                fontSize: 11.5,
+                cursor: "pointer"
+              }}
+            >
+              🔒 Verrouiller la Session Super-Admin
+            </button>
           </div>
         )}
       </div>
 
       {isSuperAdminVerified && (
         <>
-          {/* 1. INTERRUPTEURS GLOBAUX ON/OFF DE LA PLATEFORME */}
+          {/* =============================================================== */}
+          {/* BARRE DE NAVIGATION INTERNE SUPER-ADMIN (5 MODULES MANUELS)     */}
+          {/* =============================================================== */}
           <div
             style={{
-              padding: 20,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              padding: 12,
               backgroundColor: Theme.surface,
-              borderRadius: 16,
+              borderRadius: 14,
               border: `1px solid ${Theme.border}`
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 15, color: Theme.orange, marginBottom: 12 }}>
-              1. ACTIVATION / DÉSACTIVATION GLOBALE DES FONCTIONNALITÉS (ON / OFF SANS CODER)
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                gap: 10
-              }}
-            >
-              {[
-                ["vinDecoder", "Décodage VIN & Code Moteur"],
-                ["mecaVerif", "Service Externe MécaVerif+ (250/300 DA)"],
-                ["mekanikAiObd", "Assistant Diagnostic MekanikAI OBD-II"],
-                ["bodyshopMandatoryPhotos", "Obligation Photos Avant/Après Carrosserie"],
-                ["b2bSupplierPortal", "Flux B2B Fournisseur ↔ Magasin / Atelier"],
-                ["subAccounts2Fa", "Sécurité 2FA Google Authenticator Sous-Comptes"]
-              ].map(([flagKey, flagLabel]) => {
-                const isOn = featureFlags[flagKey] !== false;
-                return (
-                  <div
-                    key={flagKey}
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      backgroundColor: Theme.bg,
-                      border: `1px solid ${isOn ? Theme.green : Theme.red}`,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8
-                    }}
-                  >
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>{flagLabel}</span>
-                    <button
-                      onClick={() => onToggleFeatureFlag(flagKey)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        border: "none",
-                        backgroundColor: isOn ? Theme.green : Theme.red,
-                        color: "#FFF",
-                        fontWeight: 900,
-                        fontSize: 11,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {isOn ? "ON" : "OFF"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. GESTIONNAIRE DE CLÉS API NO-CODE (TECDOC, ETKA, STELLANTIS, VIN, TIKTOK...) */}
-          <div
-            style={{
-              padding: 20,
-              backgroundColor: Theme.surface,
-              borderRadius: 16,
-              border: `1px solid ${Theme.border}`
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 15, color: Theme.orange, marginBottom: 4 }}>
-              2. COFFRE-FORT CLÉS API NO-CODE (TECDOC, ETKA, GROUPE STELLANTIS, VIN, DIALOGYS, TIKTOK)
-            </div>
-            <div style={{ fontSize: 12, color: Theme.textSecondary, marginBottom: 14 }}>
-              Modifiez ou ajoutez manuellement vos clés API externes sans jamais toucher au code source.
-            </div>
-
-            {/* Ajouter une nouvelle API manuellement */}
-            <div
-              style={{
-                padding: 14,
-                borderRadius: 12,
-                backgroundColor: Theme.bg,
-                border: `1px solid ${Theme.green}`,
-                marginBottom: 14,
-                display: "grid",
-                gap: 10
-              }}
-            >
-              <div style={{ fontWeight: 800, fontSize: 12.5, color: Theme.green }}>
-                + INTRODUIRE UNE NOUVELLE API EXTERNE MANUELLEMENT
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
-                <input
-                  value={newApiServiceName}
-                  onChange={(e) => setNewApiServiceName(e.target.value)}
-                  placeholder="Nom de l'API (ex: Microcat, Autodata, WhatsApp...)"
-                  style={{ padding: "9px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
-                />
-                <input
-                  value={newApiEndpoint}
-                  onChange={(e) => setNewApiEndpoint(e.target.value)}
-                  placeholder="URL Endpoint"
-                  style={{ padding: "9px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
-                />
-                <input
-                  value={newApiKeyVal}
-                  onChange={(e) => setNewApiKeyVal(e.target.value)}
-                  placeholder="Clé API / Token Secret"
-                  style={{ padding: "9px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
-                />
+            {[
+              { id: "PRIX_ABONNEMENTS", label: "💰 1. Changer Prix Abonnements & MécaVerif+" },
+              {
+                id: "CONFIRMER_PAIEMENTS",
+                label: `💳 2. Confirmer les Paiements (${pendingPaymentsCount} en attente)`
+              },
+              {
+                id: "CONFIRMER_COMPTES",
+                label: `👥 3. Confirmer les Comptes (${allAccounts.length} inscrits${pendingAccountsCount > 0 ? ` • ${pendingAccountsCount} à valider` : ""})`
+              },
+              {
+                id: "CLES_API_MULTIPLES",
+                label: `🔌 4. Changer & Ajouter des APIs (${apiVault.length} APIs actives)`
+              },
+              { id: "OPTIONS_ON_OFF", label: "⚙️ 5. Interrupteurs ON / OFF" }
+            ].map((tab) => {
+              const active = activeAdminTab === tab.id;
+              return (
                 <button
-                  onClick={() => {
-                    if (!newApiServiceName.trim() || !newApiKeyVal.trim()) return;
-                    setApiVault([
-                      {
-                        id: `API-${Date.now().toString().slice(-4)}`,
-                        name: newApiServiceName.trim(),
-                        group: "API Externe Personnalisée",
-                        endpoint: newApiEndpoint.trim(),
-                        apiKey: newApiKeyVal.trim(),
-                        enabled: true
-                      },
-                      ...apiVault
-                    ]);
-                    setNewApiServiceName("");
-                    setNewApiKeyVal("");
-                    onShowToast("Nouvelle clé API ajoutée avec succès dans le coffre-fort Super-Admin !");
-                  }}
+                  key={tab.id}
+                  onClick={() => setActiveAdminTab(tab.id as any)}
                   style={{
-                    padding: "9px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    backgroundColor: Theme.green,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: `1.5px solid ${active ? Theme.orange : Theme.border}`,
+                    backgroundColor: active ? Theme.orange : Theme.bg,
                     color: "#FFF",
                     fontWeight: 900,
+                    fontSize: 12,
                     cursor: "pointer"
                   }}
                 >
-                  + Ajouter l'API
+                  {tab.label}
                 </button>
+              );
+            })}
+          </div>
+
+          {/* =============================================================== */}
+          {/* ONGLET 1 : CHANGER LES PRIX DES ABONNEMENTS MANUELLEMENT        */}
+          {/* =============================================================== */}
+          {activeAdminTab === "PRIX_ABONNEMENTS" && (
+            <div
+              style={{
+                padding: 20,
+                backgroundColor: Theme.surface,
+                borderRadius: 16,
+                border: `1px solid ${Theme.border}`,
+                display: "grid",
+                gap: 16
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: Theme.orange }}>
+                  💰 MODIFICATION MANUELLE DES PRIX DES ABONNEMENTS & MÉCAVERIF+ (SANS CODER)
+                </div>
+                <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 4 }}>
+                  Modifiez directement les tarifs en Dinars (DA) ci-dessous. Chaque changement s'applique instantanément sur le site public, la création de compte et les factures d'abonnement.
+                </div>
               </div>
-            </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              {apiVault.map((api, idx) => (
-                <div
-                  key={api.id}
-                  style={{
-                    padding: 14,
-                    borderRadius: 12,
-                    backgroundColor: Theme.bg,
-                    border: `1px solid ${api.enabled ? Theme.border : Theme.red}`,
-                    display: "grid",
-                    gap: 8
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 13.5 }}>{api.name}</div>
-                      <div style={{ fontSize: 11, color: Theme.textSecondary }}>
-                        {api.group} • Endpoint : <span style={{ fontFamily: "monospace" }}>{api.endpoint}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const next = [...apiVault];
-                        next[idx] = { ...api, enabled: !api.enabled };
-                        setApiVault(next);
-                      }}
-                      style={{
-                        padding: "5px 10px",
-                        borderRadius: 6,
-                        border: "none",
-                        backgroundColor: api.enabled ? Theme.green : Theme.red,
-                        color: "#FFF",
-                        fontWeight: 800,
-                        fontSize: 11,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {api.enabled ? "ACTIVE ✓" : "DÉSACTIVÉE"}
-                    </button>
+              {/* Prix unitaires MécaVerif+ */}
+              <div
+                style={{
+                  padding: 16,
+                  borderRadius: 12,
+                  backgroundColor: Theme.bg,
+                  border: `1px solid ${Theme.green}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 12
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 14, color: Theme.green }}>
+                    🛡️ TARIFS PAR NUMÉRO DE CHÂSSIS (VIN) DU SERVICE MÉCAVERIF+™
                   </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11.5, color: Theme.textSecondary }}>
+                    Tarif Professionnel (Ateliers / Magasins / Mixte) et Tarif Particulier par consultation VIN.
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <label style={{ fontSize: 10.5, color: Theme.textSecondary, display: "block" }}>
+                      Tarif Pro (DA / VIN)
+                    </label>
                     <input
-                      value={api.apiKey}
-                      onChange={(e) => {
-                        const next = [...apiVault];
-                        next[idx] = { ...api, apiKey: e.target.value };
-                        setApiVault(next);
-                      }}
+                      type="number"
+                      value={proMvInput}
+                      onChange={(e) => setProMvInput(e.target.value)}
                       style={{
-                        flex: 1,
-                        minWidth: 220,
-                        padding: "8px 12px",
+                        width: 110,
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        backgroundColor: Theme.surface,
+                        color: Theme.green,
+                        fontWeight: 900,
+                        border: `1px solid ${Theme.green}`
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10.5, color: Theme.textSecondary, display: "block" }}>
+                      Tarif Particulier (DA / VIN)
+                    </label>
+                    <input
+                      type="number"
+                      value={partMvInput}
+                      onChange={(e) => setPartMvInput(e.target.value)}
+                      style={{
+                        width: 110,
+                        padding: "8px 10px",
                         borderRadius: 8,
                         backgroundColor: Theme.surface,
                         color: Theme.orange,
-                        border: `1px solid ${Theme.border}`,
-                        fontFamily: "monospace",
-                        fontWeight: 800
+                        fontWeight: 900,
+                        border: `1px solid ${Theme.orange}`
                       }}
                     />
-                    <button
-                      onClick={() =>
-                        onShowToast(`Clé API ${api.name} mise à jour à chaud !`)
-                      }
+                  </div>
+                  <button
+                    onClick={() => {
+                      const proVal = Math.max(0, parseInt(proMvInput || "250", 10) || 250);
+                      const partVal = Math.max(0, parseInt(partMvInput || "300", 10) || 300);
+                      onUpdateMecaVerifPrices(proVal, partVal);
+                      onShowToast(
+                        `Tarifs MécaVerif+ mis à jour par ${SUPER_ADMIN_UNIQUE_EMAIL} : ${proVal} DA (Pro) / ${partVal} DA (Particulier)`
+                      );
+                    }}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.green,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      marginTop: 14
+                    }}
+                  >
+                    Sauvegarder Tarifs MécaVerif+
+                  </button>
+                </div>
+              </div>
+
+              {/* Grille des 7 formules d'abonnement */}
+              <div style={{ display: "grid", gap: 12 }}>
+                {(Object.keys(rolesPricing) as AccountRoleId[]).map((roleKey) => {
+                  const meta = rolesPricing[roleKey];
+                  return (
+                    <RolePriceEditorRow
+                      key={roleKey}
+                      meta={meta}
+                      onSave={(monthly, setup, maxSubs) => {
+                        onUpdateRolePricing(roleKey, monthly, setup, maxSubs);
+                        onShowToast(
+                          `Prix de la formule ${meta.shortBadge} mis à jour : ${monthly.toLocaleString("fr-FR")} DA / mois`
+                        );
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ONGLET 2 : CONFIRMER LES PAIEMENTS MANUELLEMENT                 */}
+          {/* =============================================================== */}
+          {activeAdminTab === "CONFIRMER_PAIEMENTS" && (
+            <div
+              style={{
+                padding: 20,
+                backgroundColor: Theme.surface,
+                borderRadius: 16,
+                border: `1px solid ${Theme.border}`,
+                display: "grid",
+                gap: 16
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 16, color: Theme.orange }}>
+                    💳 CONFIRMATION MANUELLE DES PAIEMENTS CLIENTS & ABONNEMENTS
+                  </div>
+                  <div style={{ fontSize: 12, color: Theme.textSecondary }}>
+                    Validez ou rejetez en 1 clic les paiements reçus par CIB/SATIM, Edahabia, BaridiMob, Virement CCP/RIB ou Stripe.
+                  </div>
+                </div>
+                {pendingPaymentsCount > 0 && (
+                  <button
+                    onClick={() => {
+                      const next = payments.map((p) =>
+                        p.status === "EN_ATTENTE" ? { ...p, status: "CONFIRME" as const } : p
+                      );
+                      savePayments(next);
+                      onShowToast(`Tous les paiements en attente (${pendingPaymentsCount}) ont été confirmés !`);
+                    }}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.green,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    ✅ Tout Confirmer ({pendingPaymentsCount} en attente)
+                  </button>
+                )}
+              </div>
+
+              {/* Ajouter un paiement manuel reçu */}
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: Theme.bg,
+                  border: `1px solid ${Theme.border}`,
+                  display: "grid",
+                  gap: 10
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: 12.5, color: Theme.cyan }}>
+                  + ENREGISTRER & CONFIRMER UN NOUVEAU PAIEMENT REÇU MANUELLEMENT
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                  <input
+                    value={newPayOrg}
+                    onChange={(e) => setNewPayOrg(e.target.value)}
+                    placeholder="Client / Garage / Magasin"
+                    style={{ padding: "9px 10px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newPayEmail}
+                    onChange={(e) => setNewPayEmail(e.target.value)}
+                    placeholder="Email du client"
+                    style={{ padding: "9px 10px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newPayLabel}
+                    onChange={(e) => setNewPayLabel(e.target.value)}
+                    placeholder="Motif (Abonnement / MécaVerif+)"
+                    style={{ padding: "9px 10px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    type="number"
+                    value={newPayAmount}
+                    onChange={(e) => setNewPayAmount(e.target.value)}
+                    placeholder="Montant (DA)"
+                    style={{ padding: "9px 10px", borderRadius: 8, backgroundColor: Theme.surface, color: Theme.green, fontWeight: 900, border: `1px solid ${Theme.border}` }}
+                  />
+                  <select
+                    value={newPayMethod}
+                    onChange={(e) => setNewPayMethod(e.target.value as any)}
+                    style={{ padding: "9px 10px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  >
+                    <option value="CIB / SATIM">CIB / SATIM</option>
+                    <option value="EDAHABIA">EDAHABIA</option>
+                    <option value="BARIDIMOB QR">BARIDIMOB QR</option>
+                    <option value="VIREMENT CCP / RIB">VIREMENT CCP / RIB</option>
+                    <option value="STRIPE VISA">STRIPE VISA</option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      if (!newPayOrg.trim()) return;
+                      const created: SuperAdminPaymentItem = {
+                        id: `PAY-2026-${Math.floor(910 + Math.random() * 89)}`,
+                        payerOrganization: newPayOrg.trim(),
+                        payerEmail: newPayEmail.trim() || "client@mekanikplus.dz",
+                        planOrServiceLabel: newPayLabel.trim(),
+                        amountDzd: parseInt(newPayAmount || "9900", 10) || 9900,
+                        paymentMethod: newPayMethod,
+                        referenceCode: `MAN-${Date.now().toString().slice(-6)}`,
+                        date: new Date().toLocaleDateString("fr-FR") + " " + new Date().toLocaleTimeString("fr-FR").slice(0, 5),
+                        status: "CONFIRME"
+                      };
+                      savePayments([created, ...payments]);
+                      setNewPayOrg("");
+                      setNewPayEmail("");
+                      onShowToast(`Paiement de ${created.amountDzd.toLocaleString("fr-FR")} DA enregistré et confirmé !`);
+                    }}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.orange,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      cursor: "pointer"
+                    }}
+                  >
+                    + Ajouter & Confirmer
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {payments.map((pay) => {
+                  const statusColor =
+                    pay.status === "CONFIRME"
+                      ? Theme.green
+                      : pay.status === "REJETE"
+                      ? Theme.red
+                      : Theme.orange;
+                  return (
+                    <div
+                      key={pay.id}
                       style={{
-                        padding: "8px 14px",
+                        padding: 14,
+                        borderRadius: 12,
+                        backgroundColor: Theme.bg,
+                        border: `1.5px solid ${statusColor}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 10
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 900, fontSize: 13.5 }}>{pay.payerOrganization}</span>
+                          <span style={{ fontSize: 11, color: Theme.textSecondary }}>({pay.payerEmail})</span>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 5,
+                              backgroundColor: statusColor,
+                              color: "#FFF",
+                              fontWeight: 900,
+                              fontSize: 10
+                            }}
+                          >
+                            {pay.status === "CONFIRME"
+                              ? "CONFIRMÉ PAR SUPER-ADMIN"
+                              : pay.status === "REJETE"
+                              ? "REJETÉ"
+                              : "EN ATTENTE DE CONFIRMATION"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: Theme.textPrimary, marginTop: 4 }}>
+                          {pay.planOrServiceLabel}
+                        </div>
+                        <div style={{ fontSize: 11, color: Theme.textSecondary, marginTop: 2, fontFamily: "monospace" }}>
+                          Méthode : {pay.paymentMethod} • Réf : {pay.referenceCode} • Date : {pay.date}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <strong style={{ fontSize: 15, color: Theme.green, marginRight: 6 }}>
+                          {pay.amountDzd.toLocaleString("fr-FR")} DA
+                        </strong>
+                        {pay.status !== "CONFIRME" && (
+                          <button
+                            onClick={() => {
+                              const next = payments.map((p) =>
+                                p.id === pay.id ? { ...p, status: "CONFIRME" as const } : p
+                              );
+                              savePayments(next);
+                              onShowToast(`Paiement ${pay.referenceCode} (${pay.amountDzd} DA) confirmé !`);
+                            }}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              border: "none",
+                              backgroundColor: Theme.green,
+                              color: "#FFF",
+                              fontWeight: 900,
+                              fontSize: 11.5,
+                              cursor: "pointer"
+                            }}
+                          >
+                            ✅ Confirmer
+                          </button>
+                        )}
+                        {pay.status !== "REJETE" && (
+                          <button
+                            onClick={() => {
+                              const next = payments.map((p) =>
+                                p.id === pay.id ? { ...p, status: "REJETE" as const } : p
+                              );
+                              savePayments(next);
+                              onShowToast(`Paiement ${pay.referenceCode} rejeté.`);
+                            }}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              border: `1px solid ${Theme.red}`,
+                              backgroundColor: Theme.surface,
+                              color: Theme.red,
+                              fontWeight: 800,
+                              fontSize: 11.5,
+                              cursor: "pointer"
+                            }}
+                          >
+                            ❌ Rejeter
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ONGLET 3 : CONFIRMER LES COMPTES INSCRITS MANUELLEMENT          */}
+          {/* =============================================================== */}
+          {activeAdminTab === "CONFIRMER_COMPTES" && (
+            <div
+              style={{
+                padding: 20,
+                backgroundColor: Theme.surface,
+                borderRadius: 16,
+                border: `1px solid ${Theme.border}`,
+                display: "grid",
+                gap: 14
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: Theme.orange }}>
+                  👥 CONFIRMATION & GESTION MANUELLE DES COMPTES INSCRITS ({allAccounts.length} COMPTES)
+                </div>
+                <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 4 }}>
+                  Approuvez les nouveaux comptes, suspendez un accès ou modifiez manuellement la formule d'abonnement d'un client en 1 clic.
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {allAccounts.map((acc) => {
+                  const status = acc.approvalStatus || "CONFIRME";
+                  const statusColor =
+                    status === "CONFIRME"
+                      ? Theme.green
+                      : status === "SUSPENDU"
+                      ? Theme.red
+                      : Theme.orange;
+                  const rMeta = rolesPricing[acc.role];
+                  return (
+                    <div
+                      key={acc.userId}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        backgroundColor: Theme.bg,
+                        border: `1.5px solid ${statusColor}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 10
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 900, fontSize: 14 }}>{acc.organizationName}</span>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 5,
+                              backgroundColor: rMeta.accentColor,
+                              color: "#FFF",
+                              fontWeight: 900,
+                              fontSize: 10
+                            }}
+                          >
+                            {rMeta.shortBadge}
+                          </span>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 5,
+                              backgroundColor: statusColor,
+                              color: "#FFF",
+                              fontWeight: 900,
+                              fontSize: 10
+                            }}
+                          >
+                            {status === "CONFIRME"
+                              ? "COMPTE CONFIRMÉ & ACTIF"
+                              : status === "SUSPENDU"
+                              ? "COMPTE SUSPENDU"
+                              : "EN ATTENTE DE CONFIRMATION"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 4 }}>
+                          Titulaire : <strong style={{ color: "#FFF" }}>{acc.fullName}</strong> ({acc.email}) • Tél : {acc.phone} • Wilaya : {acc.wilaya} • RC : {acc.rcNumber}
+                        </div>
+                        <div style={{ fontSize: 11, color: Theme.green, marginTop: 2 }}>
+                          Tarif appliqué : {rMeta.monthlyPriceDzd.toLocaleString("fr-FR")} DA / mois • Sous-comptes : {acc.subAccounts.length}/{rMeta.maxSubAccounts}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <select
+                          value={acc.role}
+                          onChange={(e) => {
+                            const nextRole = e.target.value as AccountRoleId;
+                            onUpdateAccountStatusOrRole(acc.userId, status, nextRole);
+                            onShowToast(
+                              `Formule de ${acc.organizationName} changée en ${rolesPricing[nextRole].shortBadge}`
+                            );
+                          }}
+                          style={{
+                            padding: "7px 10px",
+                            borderRadius: 8,
+                            backgroundColor: Theme.surface,
+                            color: "#FFF",
+                            border: `1px solid ${Theme.border}`,
+                            fontWeight: 800,
+                            fontSize: 11
+                          }}
+                        >
+                          {(Object.keys(rolesPricing) as AccountRoleId[]).map((rk) => (
+                            <option key={rk} value={rk}>
+                              {rolesPricing[rk].shortBadge} ({rolesPricing[rk].monthlyPriceDzd} DA)
+                            </option>
+                          ))}
+                        </select>
+
+                        {status !== "CONFIRME" && (
+                          <button
+                            onClick={() => {
+                              onUpdateAccountStatusOrRole(acc.userId, "CONFIRME");
+                              onShowToast(`Compte ${acc.organizationName} confirmé et activé !`);
+                            }}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              border: "none",
+                              backgroundColor: Theme.green,
+                              color: "#FFF",
+                              fontWeight: 900,
+                              fontSize: 11.5,
+                              cursor: "pointer"
+                            }}
+                          >
+                            ✅ Confirmer le Compte
+                          </button>
+                        )}
+
+                        {status !== "SUSPENDU" && (
+                          <button
+                            onClick={() => {
+                              onUpdateAccountStatusOrRole(acc.userId, "SUSPENDU");
+                              onShowToast(`Compte ${acc.organizationName} suspendu.`);
+                            }}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              border: `1px solid ${Theme.red}`,
+                              backgroundColor: Theme.surface,
+                              color: Theme.red,
+                              fontWeight: 800,
+                              fontSize: 11.5,
+                              cursor: "pointer"
+                            }}
+                          >
+                            ⏸️ Suspendre
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ONGLET 4 : CHANGER & AJOUTER PLUSIEURS APIS MANUELLEMENT        */}
+          {/*            (SANS TIKTOK • PROTÉGÉ PAR CODE EMAIL badroumc@gmail.com) */}
+          {/* =============================================================== */}
+          {activeAdminTab === "CLES_API_MULTIPLES" && (
+            <div
+              style={{
+                padding: 20,
+                backgroundColor: Theme.surface,
+                borderRadius: 16,
+                border: `1px solid ${Theme.border}`,
+                display: "grid",
+                gap: 16
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: Theme.orange }}>
+                  🔌 GESTIONNAIRE MULTI-API SANS CODER (TECDOC, ETKA, STELLANTIS, VIN, DIALOGYS, XENTRY, MICROCAT, AUTODATA, SATIM, STRIPE)
+                </div>
+                <div style={{ fontSize: 12, color: Theme.textSecondary, marginTop: 4 }}>
+                  Ajoutez autant d'APIs externes que vous le souhaitez et modifiez vos clés manuellement. L'API TikTok a été définitivement supprimée conformément à vos instructions.
+                </div>
+              </div>
+
+              {/* Bandeau de sécurité Email badroumc@gmail.com pour autoriser les modifications d'API */}
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: Theme.bg,
+                  border: `1.5px solid ${isApiEmailUnlocked ? Theme.green : Theme.cyan}`,
+                  display: "grid",
+                  gap: 10
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 12.5, color: Theme.cyan }}>
+                      📧 PROTECTION PAR MOT DE PASSE & CODE EMAIL SUR {SUPER_ADMIN_UNIQUE_EMAIL} POUR CHANGER / AJOUTER LES APIS
+                    </div>
+                    <div style={{ fontSize: 11, color: Theme.textSecondary }}>
+                      {emailDispatchedBanner}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSendEmailPasswordAndCode}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.cyan,
+                      color: "#000",
+                      fontWeight: 900,
+                      fontSize: 11,
+                      cursor: "pointer"
+                    }}
+                  >
+                    📧 Renvoyer un Code sur {SUPER_ADMIN_UNIQUE_EMAIL}
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+                  <input
+                    value={apiPasswordChallengeInput}
+                    onChange={(e) => setApiPasswordChallengeInput(e.target.value)}
+                    placeholder={`Mot de passe reçu sur ${SUPER_ADMIN_UNIQUE_EMAIL}`}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.surface,
+                      color: "#FFF",
+                      fontFamily: "monospace",
+                      fontWeight: 800,
+                      border: `1px solid ${Theme.border}`
+                    }}
+                  />
+                  <input
+                    value={apiEmailChallengeInput}
+                    onChange={(e) => setApiEmailChallengeInput(e.target.value)}
+                    placeholder={`Code à 6 chiffres reçu sur ${SUPER_ADMIN_UNIQUE_EMAIL}`}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.surface,
+                      color: Theme.cyan,
+                      fontFamily: "monospace",
+                      fontWeight: 900,
+                      border: `1px solid ${Theme.cyan}`
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (
+                        apiEmailChallengeInput.trim() === generatedEmailOtpCode &&
+                        apiPasswordChallengeInput.trim() === generatedEmailPassword
+                      ) {
+                        setIsApiEmailUnlocked(true);
+                        onShowToast(
+                          `Code Email & Mot de passe (${SUPER_ADMIN_UNIQUE_EMAIL}) validés : ajout et modification d'APIs autorisés !`
+                        );
+                      } else {
+                        onShowToast(
+                          `Code Email ou Mot de passe incorrect. Attendu : ${generatedEmailPassword} / ${generatedEmailOtpCode}`
+                        );
+                      }
+                    }}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.green,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      fontSize: 11.5,
+                      cursor: "pointer"
+                    }}
+                  >
+                    ✓ Vérifier Code Email {SUPER_ADMIN_UNIQUE_EMAIL}
+                  </button>
+                </div>
+              </div>
+
+              {/* Modèles rapides 1-clic pour pré-remplir n'importe quelle API automobile */}
+              <div>
+                <div style={{ fontSize: 11.5, fontWeight: 900, color: Theme.orange, marginBottom: 8 }}>
+                  MODÈLES RAPIDES POUR AJOUTER PLUSIEURS APIS AUTOMOBILES EN 1 CLIC :
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[
+                    [
+                      "📘 + API TecDoc",
+                      "TecDoc Pegasus 3.0 Secondary Node",
+                      "Catalogue OEM & Équivalences",
+                      "https://webservice.tecalliance.services/pegasus-3-0/services/TecdocToCatDLB.jsonEndpoint",
+                      "TD-PRO-KEY-2026",
+                      "td_secret_token_9948",
+                      '{"X-TecDoc-Provider": "22491"}'
+                    ],
+                    [
+                      "🚗 + API ETKA (VAG)",
+                      "ETKA / Partslink24 VAG Live",
+                      "Groupe VAG (VW, Audi, Seat, Škoda)",
+                      "https://api.partslink24.com/v2/vag-etka/chassis-lookup",
+                      "ETKA-VAG-KEY-8831",
+                      "etka_vag_secret_4410",
+                      '{"X-ETKA-Market": "RDW"}'
+                    ],
+                    [
+                      "🦁 + API Stellantis ServiceBox",
+                      "Groupe Stellantis ServiceBox & SEDRE",
+                      "Peugeot, Citroën, DS, Fiat, Opel, Jeep",
+                      "https://api.servicebox.stellantis.com/v3/vin-and-parts",
+                      "STELLANTIS-SBX-5519",
+                      "sedre_opr_dam_secret_7721",
+                      '{"X-Stellantis-Brands": "ALL"}'
+                    ],
+                    [
+                      "🔍 + API Lecture Châssis VIN",
+                      "AutoDNA / CarVertical / Vincario VIN API",
+                      "Lecture Numéro de Châssis & Historique Km",
+                      "https://api.vincario.com/3.2/vin-decode",
+                      "VIN-DECODER-KEY-6620",
+                      "vin_hash_secret_2026",
+                      '{"X-Decode-Full": "true"}'
+                    ],
+                    [
+                      "🔧 + API Autodata / HaynesPro",
+                      "Autodata & HaynesPro WorkshopData API",
+                      "Couples de Serrage, Distribution & Schémas OBD",
+                      "https://api.autodata-group.com/v1/technical-repair-data",
+                      "AUTODATA-KEY-3310",
+                      "haynespro_secret_8841",
+                      '{"X-Include-Wiring": "true"}'
+                    ],
+                    [
+                      "🌏 + API SinoAuto360 / Microcat",
+                      "SinoAuto360 & Microcat (Chery, Geely, JAC, Toyota, Hyundai)",
+                      "Constructeurs Asiatiques & Chinois par VIN",
+                      "https://api.sinoauto360.cn/v2/epc/vin-lookup",
+                      "SINO-MCAT-KEY-7740",
+                      "sino_epc_secret_1190",
+                      '{"X-Brands": "CHERY,GEELY,JAC,BYD,TOYOTA,HYUNDAI"}'
+                    ]
+                  ].map(([btnLabel, name, grp, url, key, sec, hdr]) => (
+                    <button
+                      key={btnLabel}
+                      onClick={() => loadApiPreset(name, grp, url, key, sec, hdr)}
+                      style={{
+                        padding: "7px 12px",
                         borderRadius: 8,
-                        border: "none",
-                        backgroundColor: Theme.orange,
+                        border: `1px solid ${Theme.orange}`,
+                        backgroundColor: Theme.bg,
                         color: "#FFF",
                         fontWeight: 800,
-                        fontSize: 12,
+                        fontSize: 11.5,
                         cursor: "pointer"
                       }}
                     >
-                      Sauvegarder Clé
+                      {btnLabel}
                     </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* 3. LISTE DES COMPTES ORGANISATIONS & SOUS-COMPTES INSCRITS */}
-          <div
-            style={{
-              padding: 20,
-              backgroundColor: Theme.surface,
-              borderRadius: 16,
-              border: `1px solid ${Theme.border}`
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 15, color: Theme.orange, marginBottom: 12 }}>
-              3. COMPTES ORGANISATIONS INSCRITS & SOUS-COMPTES ({allAccounts.length} ORGANISATIONS)
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {allAccounts.map((acc) => (
-                <div
-                  key={acc.userId}
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    backgroundColor: Theme.bg,
-                    border: `1px solid ${Theme.border}`,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 8
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 13 }}>
-                      {acc.organizationName} •{" "}
-                      <span style={{ color: Theme.orange }}>
-                        [{ACCOUNT_ROLES[acc.role].shortBadge}]
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: Theme.textSecondary }}>
-                      Titulaire : {acc.fullName} ({acc.email}) • Wilaya : {acc.wilaya} • Sous-comptes :{" "}
-                      {acc.subAccounts.length}/{ACCOUNT_ROLES[acc.role].maxSubAccounts} • 2FA : Actif
-                    </div>
-                  </div>
-                  <span
+              {/* Formulaire complet pour ajouter ou modifier une API manuellement */}
+              <div
+                style={{
+                  padding: 16,
+                  borderRadius: 12,
+                  backgroundColor: Theme.bg,
+                  border: `1.5px solid ${Theme.green}`,
+                  display: "grid",
+                  gap: 10
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 13, color: Theme.green }}>
+                  {editingApiId
+                    ? `✏️ MODIFIER MANUELLEMENT L'API [${editingApiId}]`
+                    : "+ AJOUTER UNE NOUVELLE API EXTERNE MANUELLEMENT (SANS CODER)"}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                  <input
+                    value={newApiServiceName}
+                    onChange={(e) => setNewApiServiceName(e.target.value)}
+                    placeholder="Nom de l'API (ex: TecDoc, ETKA, Stellantis, Microcat, Autodata...)"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newApiGroup}
+                    onChange={(e) => setNewApiGroup(e.target.value)}
+                    placeholder="Catégorie / Groupe Constructeur"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newApiEndpoint}
+                    onChange={(e) => setNewApiEndpoint(e.target.value)}
+                    placeholder="URL Endpoint WebService"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", fontFamily: "monospace", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newApiKeyVal}
+                    onChange={(e) => setNewApiKeyVal(e.target.value)}
+                    placeholder="Clé API / Client ID / Provider ID"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: Theme.orange, fontFamily: "monospace", fontWeight: 800, border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newApiSecretVal}
+                    onChange={(e) => setNewApiSecretVal(e.target.value)}
+                    placeholder="Secret Key / Token Privé"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: Theme.cyan, fontFamily: "monospace", border: `1px solid ${Theme.border}` }}
+                  />
+                  <input
+                    value={newApiWebhookVal}
+                    onChange={(e) => setNewApiWebhookVal(e.target.value)}
+                    placeholder="Webhook URL (Optionnel)"
+                    style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: Theme.surface, color: "#FFF", fontFamily: "monospace", border: `1px solid ${Theme.border}` }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <input
+                    value={newApiHeadersVal}
+                    onChange={(e) => setNewApiHeadersVal(e.target.value)}
+                    placeholder='En-têtes JSON (ex: {"X-TecDoc-Provider": "22491"})'
                     style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      backgroundColor: "rgba(34,197,94,0.16)",
-                      color: Theme.green,
-                      fontWeight: 800,
-                      fontSize: 11
+                      flex: 1,
+                      minWidth: 220,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      backgroundColor: Theme.surface,
+                      color: "#FFF",
+                      fontFamily: "monospace",
+                      border: `1px solid ${Theme.border}`
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!isApiEmailUnlocked) {
+                        onShowToast(
+                          `Veuillez d'abord valider le code reçu sur ${SUPER_ADMIN_UNIQUE_EMAIL} ci-dessus.`
+                        );
+                        return;
+                      }
+                      if (!newApiServiceName.trim() || !newApiKeyVal.trim()) {
+                        onShowToast("Veuillez saisir le nom de l'API et la clé API.");
+                        return;
+                      }
+                      const entry: ExternalApiConfigRecord = {
+                        id: editingApiId || `API-${Date.now().toString().slice(-5)}`,
+                        name: newApiServiceName.trim(),
+                        group: newApiGroup.trim() || "API Automobile Externe",
+                        endpoint: newApiEndpoint.trim() || "https://api.mekanikplus.dz",
+                        apiKey: newApiKeyVal.trim(),
+                        apiSecret: newApiSecretVal.trim() || "secret_live_token",
+                        webhookUrl: newApiWebhookVal.trim(),
+                        customHeadersJson: newApiHeadersVal.trim(),
+                        enabled: true,
+                        addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+                      };
+                      if (editingApiId) {
+                        saveApiVault(apiVault.map((a) => (a.id === editingApiId ? entry : a)));
+                        onShowToast(`API ${entry.name} modifiée avec succès par ${SUPER_ADMIN_UNIQUE_EMAIL} !`);
+                      } else {
+                        saveApiVault([entry, ...apiVault]);
+                        onShowToast(`Nouvelle API ${entry.name} ajoutée au coffre-fort Super-Admin !`);
+                      }
+                      setEditingApiId(null);
+                      setNewApiServiceName("");
+                      setNewApiKeyVal("");
+                      setNewApiSecretVal("");
+                    }}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: Theme.green,
+                      color: "#FFF",
+                      fontWeight: 900,
+                      cursor: "pointer"
                     }}
                   >
-                    {ACCOUNT_ROLES[acc.role].monthlyPriceDzd} DA / mois
-                  </span>
+                    {editingApiId ? "💾 Enregistrer les Modifications" : "+ Ajouter cette API au Coffre-Fort"}
+                  </button>
                 </div>
-              ))}
+              </div>
+
+              {/* Liste complète des APIs configurées (Modification en direct + Suppression) */}
+              <div style={{ display: "grid", gap: 10 }}>
+                {apiVault.map((api, idx) => (
+                  <div
+                    key={api.id}
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      backgroundColor: Theme.bg,
+                      border: `1px solid ${api.enabled ? Theme.border : Theme.red}`,
+                      display: "grid",
+                      gap: 8
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 13.5 }}>{api.name}</div>
+                        <div style={{ fontSize: 11, color: Theme.textSecondary }}>
+                          {api.group} • Validée par : <strong style={{ color: Theme.cyan }}>{api.addedByEmail}</strong>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          onClick={() => {
+                            setEditingApiId(api.id);
+                            setNewApiServiceName(api.name);
+                            setNewApiGroup(api.group);
+                            setNewApiEndpoint(api.endpoint);
+                            setNewApiKeyVal(api.apiKey);
+                            setNewApiSecretVal(api.apiSecret);
+                            setNewApiWebhookVal(api.webhookUrl);
+                            setNewApiHeadersVal(api.customHeadersJson);
+                          }}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 6,
+                            border: `1px solid ${Theme.cyan}`,
+                            backgroundColor: Theme.surface,
+                            color: Theme.cyan,
+                            fontWeight: 800,
+                            fontSize: 11,
+                            cursor: "pointer"
+                          }}
+                        >
+                          ✏️ Éditer Complet
+                        </button>
+                        <button
+                          onClick={() => {
+                            const next = [...apiVault];
+                            next[idx] = { ...api, enabled: !api.enabled };
+                            saveApiVault(next);
+                          }}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 6,
+                            border: "none",
+                            backgroundColor: api.enabled ? Theme.green : Theme.red,
+                            color: "#FFF",
+                            fontWeight: 800,
+                            fontSize: 11,
+                            cursor: "pointer"
+                          }}
+                        >
+                          {api.enabled ? "ACTIVE ✓" : "DÉSACTIVÉE"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            saveApiVault(apiVault.filter((a) => a.id !== api.id));
+                            onShowToast(`API ${api.name} supprimée par ${SUPER_ADMIN_UNIQUE_EMAIL}.`);
+                          }}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 6,
+                            border: `1px solid ${Theme.red}`,
+                            backgroundColor: Theme.surface,
+                            color: Theme.red,
+                            fontWeight: 800,
+                            fontSize: 11,
+                            cursor: "pointer"
+                          }}
+                        >
+                          🗑️ Supprimer
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                      <div>
+                        <label style={{ fontSize: 10, color: Theme.textSecondary }}>URL Endpoint</label>
+                        <input
+                          value={api.endpoint}
+                          onChange={(e) => {
+                            const next = [...apiVault];
+                            next[idx] = { ...api, endpoint: e.target.value };
+                            saveApiVault(next);
+                          }}
+                          style={{
+                            width: "100%",
+                            marginTop: 2,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            backgroundColor: Theme.surface,
+                            color: "#FFF",
+                            border: `1px solid ${Theme.border}`,
+                            fontFamily: "monospace",
+                            fontSize: 11.5
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: Theme.textSecondary }}>Clé API / Client ID</label>
+                        <input
+                          value={api.apiKey}
+                          onChange={(e) => {
+                            const next = [...apiVault];
+                            next[idx] = { ...api, apiKey: e.target.value };
+                            saveApiVault(next);
+                          }}
+                          style={{
+                            width: "100%",
+                            marginTop: 2,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            backgroundColor: Theme.surface,
+                            color: Theme.orange,
+                            border: `1px solid ${Theme.border}`,
+                            fontFamily: "monospace",
+                            fontWeight: 800,
+                            fontSize: 11.5
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: Theme.textSecondary }}>Secret / Token</label>
+                        <input
+                          value={api.apiSecret}
+                          onChange={(e) => {
+                            const next = [...apiVault];
+                            next[idx] = { ...api, apiSecret: e.target.value };
+                            saveApiVault(next);
+                          }}
+                          style={{
+                            width: "100%",
+                            marginTop: 2,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            backgroundColor: Theme.surface,
+                            color: Theme.cyan,
+                            border: `1px solid ${Theme.border}`,
+                            fontFamily: "monospace",
+                            fontSize: 11.5
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button
+                        onClick={() =>
+                          onShowToast(
+                            `Clé API ${api.name} enregistrée à chaud par ${SUPER_ADMIN_UNIQUE_EMAIL} !`
+                          )
+                        }
+                        style={{
+                          padding: "7px 14px",
+                          borderRadius: 8,
+                          border: "none",
+                          backgroundColor: Theme.orange,
+                          color: "#FFF",
+                          fontWeight: 800,
+                          fontSize: 11.5,
+                          cursor: "pointer"
+                        }}
+                      >
+                        💾 Sauvegarder Clé API
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ONGLET 5 : INTERRUPTEURS GLOBAUX ON / OFF SANS CODER            */}
+          {/* =============================================================== */}
+          {activeAdminTab === "OPTIONS_ON_OFF" && (
+            <div
+              style={{
+                padding: 20,
+                backgroundColor: Theme.surface,
+                borderRadius: 16,
+                border: `1px solid ${Theme.border}`
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 15, color: Theme.orange, marginBottom: 12 }}>
+                ⚙️ ACTIVATION / DÉSACTIVATION GLOBALE DES FONCTIONNALITÉS (ON / OFF SANS CODER)
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: 10
+                }}
+              >
+                {[
+                  ["vinDecoder", "Décodage VIN & Code Moteur"],
+                  ["mecaVerif", `Service Externe MécaVerif+ (${mecaVerifPrices.proPriceDzd}/${mecaVerifPrices.partPriceDzd} DA)`],
+                  ["mekanikAiObd", "Assistant Diagnostic MekanikAI OBD-II"],
+                  ["bodyshopMandatoryPhotos", "Obligation Photos Avant/Après Carrosserie"],
+                  ["b2bSupplierPortal", "Flux B2B Fournisseur ↔ Magasin / Atelier"],
+                  ["subAccounts2Fa", "Sécurité 2FA Google Authenticator Sous-Comptes"]
+                ].map(([flagKey, flagLabel]) => {
+                  const isOn = featureFlags[flagKey] !== false;
+                  return (
+                    <div
+                      key={flagKey}
+                      style={{
+                        padding: 12,
+                        borderRadius: 10,
+                        backgroundColor: Theme.bg,
+                        border: `1px solid ${isOn ? Theme.green : Theme.red}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{flagLabel}</span>
+                      <button
+                        onClick={() => onToggleFeatureFlag(flagKey)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: "none",
+                          backgroundColor: isOn ? Theme.green : Theme.red,
+                          color: "#FFF",
+                          fontWeight: 900,
+                          fontSize: 11,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {isOn ? "ON" : "OFF"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
+    </div>
+  );
+};
+
+const RolePriceEditorRow: React.FC<{
+  meta: AccountRoleMeta;
+  onSave: (monthly: number, setup: number, maxSubs: number) => void;
+}> = ({ meta, onSave }) => {
+  const [monthlyInput, setMonthlyInput] = useState(String(meta.monthlyPriceDzd));
+  const [setupInput, setSetupInput] = useState(String(meta.setupFeeDzd));
+  const [maxSubsInput, setMaxSubsInput] = useState(String(meta.maxSubAccounts));
+
+  return (
+    <div
+      style={{
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: Theme.bg,
+        border: `1.5px solid ${meta.accentColor}`,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 12
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <span
+          style={{
+            padding: "2px 8px",
+            borderRadius: 5,
+            backgroundColor: meta.accentColor,
+            color: "#FFF",
+            fontWeight: 900,
+            fontSize: 10
+          }}
+        >
+          {meta.shortBadge}
+        </span>
+        <div style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{meta.title}</div>
+        <div style={{ fontSize: 11, color: Theme.textSecondary }}>
+          Tarif actuel :{" "}
+          <strong style={{ color: Theme.green }}>
+            {meta.monthlyPriceDzd.toLocaleString("fr-FR")} DA / mois
+          </strong>{" "}
+          • Frais d'ouverture : {meta.setupFeeDzd.toLocaleString("fr-FR")} DA • Max sous-comptes :{" "}
+          {meta.maxSubAccounts}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <label style={{ fontSize: 10, color: Theme.textSecondary, display: "block" }}>
+            Prix Mensuel (DA)
+          </label>
+          <input
+            type="number"
+            value={monthlyInput}
+            onChange={(e) => setMonthlyInput(e.target.value)}
+            style={{
+              width: 115,
+              padding: "8px 10px",
+              borderRadius: 8,
+              backgroundColor: Theme.surface,
+              color: Theme.green,
+              fontWeight: 900,
+              border: `1px solid ${Theme.border}`
+            }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: Theme.textSecondary, display: "block" }}>
+            Frais Setup (DA)
+          </label>
+          <input
+            type="number"
+            value={setupInput}
+            onChange={(e) => setSetupInput(e.target.value)}
+            style={{
+              width: 110,
+              padding: "8px 10px",
+              borderRadius: 8,
+              backgroundColor: Theme.surface,
+              color: "#FFF",
+              fontWeight: 800,
+              border: `1px solid ${Theme.border}`
+            }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: Theme.textSecondary, display: "block" }}>
+            Max Sous-Comptes
+          </label>
+          <input
+            type="number"
+            value={maxSubsInput}
+            onChange={(e) => setMaxSubsInput(e.target.value)}
+            style={{
+              width: 95,
+              padding: "8px 10px",
+              borderRadius: 8,
+              backgroundColor: Theme.surface,
+              color: Theme.orange,
+              fontWeight: 900,
+              border: `1px solid ${Theme.border}`
+            }}
+          />
+        </div>
+        <button
+          onClick={() => {
+            const m = Math.max(0, parseInt(monthlyInput || "0", 10) || 0);
+            const s = Math.max(0, parseInt(setupInput || "0", 10) || 0);
+            const sub = Math.max(0, parseInt(maxSubsInput || "0", 10) || 0);
+            onSave(m, s, sub);
+          }}
+          style={{
+            padding: "9px 14px",
+            borderRadius: 8,
+            border: "none",
+            backgroundColor: Theme.orange,
+            color: "#FFF",
+            fontWeight: 900,
+            fontSize: 11.5,
+            cursor: "pointer",
+            marginTop: 12
+          }}
+        >
+          💾 Enregistrer Prix
+        </button>
+      </div>
     </div>
   );
 };

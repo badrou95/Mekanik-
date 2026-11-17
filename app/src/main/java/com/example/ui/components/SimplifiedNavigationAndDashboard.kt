@@ -790,8 +790,8 @@ fun MekanikLeftDrawerContent(
 
             DrawerNavButton(
                 icon = Icons.Default.AdminPanelSettings,
-                title = "Console Super-Administrateur (2FA)",
-                subtitle = "Activer/désactiver toutes les options & ajouter APIs (TikTok/Ext) sans code",
+                title = "Console Super-Administrateur (badroumc@gmail.com)",
+                subtitle = "Changer prix abonnements, confirmer paiements/comptes & ajouter APIs (2FA+SMS+Email)",
                 onClick = {
                     onCloseDrawer()
                     onOpenSuperAdminPortal()

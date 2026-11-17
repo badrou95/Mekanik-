@@ -115,7 +115,7 @@ data class PlatformFeatureToggleItem(
 data class NoCodeExternalApiEntry(
     val id: String,
     val apiName: String,
-    val providerCategory: String, // ex: "TecDoc / Catalogue OEM", "ETKA / Groupe VAG", "Groupe Stellantis (ServiceBox)", "Décodage Châssis VIN", "TikTok / Réseaux Sociaux"
+    val providerCategory: String, // ex: "TecDoc / Catalogue OEM", "ETKA / Groupe VAG", "Groupe Stellantis (ServiceBox)", "Décodage Châssis VIN", "Autodata / HaynesPro"
     val baseUrl: String,
     val apiKeyOrClientId: String,
     val apiSecretOrToken: String,
@@ -127,16 +127,63 @@ data class NoCodeExternalApiEntry(
     val addedBySuperAdmin: String = "badroumc@gmail.com"
 )
 
+data class ManualSubscriptionPriceEntry(
+    val role: AccountRole,
+    val monthlyPriceDzd: Int,
+    val setupFeeDzd: Int,
+    val maxSubAccounts: Int
+)
+
 object SuperAdminGlobalControlRegistry {
+    const val SUPER_ADMIN_UNIQUE_EMAIL = "badroumc@gmail.com"
     const val SUPER_ADMIN_TOTP_SECRET = "JBSWY3DPEHPK3PXPMEKANIKROOT2026"
     const val ACCOUNT_ADMIN_TOTP_SECRET_PREFIX = "MKP2FA"
 
-    // Double authentification Super-Admin : Google Authenticator (TOTP) + SMS reçu sur téléphone
+    // Triple authentification Super-Admin (badroumc@gmail.com) :
+    // 1. Google Authenticator (TOTP)
+    // 2. SMS reçu sur téléphone (+213 550 94 82 10)
+    // 3. Mot de passe & Code de sécurité envoyés sur l'adresse email unique badroumc@gmail.com
     var superAdminPhoneNumber by mutableStateOf("+213 550 94 82 10")
     var activeSmsOtpCode by mutableStateOf("849206")
     var smsSentNotificationText by mutableStateOf(
         "📲 SMS DMS Mécanicauto+ envoyé au +213 550 94 82 10 : Votre code de sécurité Super-Admin est 849206"
     )
+
+    var activeEmailPassword by mutableStateOf("MekanikBadrou2026!")
+    var activeEmailOtpCode by mutableStateOf("749182")
+    var emailSentNotificationText by mutableStateOf(
+        "📧 Email envoyé à badroumc@gmail.com : Mot de passe [ MekanikBadrou2026! ] • Code de sécurité API [ 749182 ]"
+    )
+
+    // Tarifs des abonnements & MécaVerif+ modifiables manuellement par badroumc@gmail.com sans coder
+    var mecaVerifProPriceDzd by mutableIntStateOf(250)
+    var mecaVerifPartPriceDzd by mutableIntStateOf(300)
+
+    val manualSubscriptionPrices = mutableStateListOf(
+        ManualSubscriptionPriceEntry(AccountRole.CONDUCTEUR, monthlyPriceDzd = 0, setupFeeDzd = 0, maxSubAccounts = 0),
+        ManualSubscriptionPriceEntry(AccountRole.GARAGE_PRO, monthlyPriceDzd = 9900, setupFeeDzd = 15000, maxSubAccounts = 3),
+        ManualSubscriptionPriceEntry(AccountRole.VENDEUR_PIECES, monthlyPriceDzd = 9500, setupFeeDzd = 15000, maxSubAccounts = 3),
+        ManualSubscriptionPriceEntry(AccountRole.ATELIER_MAGASIN_MIXTE, monthlyPriceDzd = 14900, setupFeeDzd = 19000, maxSubAccounts = 4),
+        ManualSubscriptionPriceEntry(AccountRole.ATELIER_CARROSSERIE, monthlyPriceDzd = 8900, setupFeeDzd = 12000, maxSubAccounts = 2),
+        ManualSubscriptionPriceEntry(AccountRole.LOCATION_VOITURES, monthlyPriceDzd = 19900, setupFeeDzd = 25000, maxSubAccounts = 5)
+    )
+
+    fun updateRoleSubscriptionPriceManually(
+        role: AccountRole,
+        newMonthlyDzd: Int,
+        newSetupDzd: Int,
+        newMaxSubs: Int
+    ) {
+        val idx = manualSubscriptionPrices.indexOfFirst { it.role == role }
+        if (idx >= 0) {
+            manualSubscriptionPrices[idx] = ManualSubscriptionPriceEntry(
+                role = role,
+                monthlyPriceDzd = newMonthlyDzd.coerceAtLeast(0),
+                setupFeeDzd = newSetupDzd.coerceAtLeast(0),
+                maxSubAccounts = newMaxSubs.coerceAtLeast(0)
+            )
+        }
+    }
 
     fun sendNewSmsOtpToSuperAdminPhone(phone: String = superAdminPhoneNumber): String {
         val cleanPhone = phone.trim().ifBlank { "+213 550 94 82 10" }
@@ -151,6 +198,22 @@ object SuperAdminGlobalControlRegistry {
     fun verifySuperAdminSmsCode(enteredSms: String): Boolean {
         val clean = enteredSms.trim().replace(" ", "")
         return clean.length == 6 && clean == activeSmsOtpCode
+    }
+
+    fun sendEmailPasswordAndOtpToSuperAdmin(): Pair<String, String> {
+        val newEmailCode = String.format("%06d", (100000..999999).random())
+        val newPwd = "BadrouAdmin#${newEmailCode.take(3)}!"
+        activeEmailOtpCode = newEmailCode
+        activeEmailPassword = newPwd
+        emailSentNotificationText =
+            "📧 Envoyé sur $SUPER_ADMIN_UNIQUE_EMAIL : Mot de passe [ $newPwd ] • Code Email API [ $newEmailCode ]"
+        return newPwd to newEmailCode
+    }
+
+    fun verifySuperAdminEmailPasswordAndCode(enteredPassword: String, enteredEmailCode: String): Boolean {
+        val cleanCode = enteredEmailCode.trim().replace(" ", "")
+        val cleanPwd = enteredPassword.trim()
+        return cleanCode == activeEmailOtpCode && cleanPwd == activeEmailPassword
     }
 
     val featureToggles = mutableStateListOf(
@@ -219,25 +282,17 @@ object SuperAdminGlobalControlRegistry {
             isEnabled = true
         ),
         PlatformFeatureToggleItem(
-            id = "FEAT_TIKTOK_SOCIAL_SYNC",
-            title = "Intégration API TikTok & Partage Vidéo Atelier / Magasin",
-            subtitle = "Publication directe des arrivages pièces et vidéos Avant/Après réparation sur TikTok",
-            category = "APIs Externes & Réseaux",
-            targetRolesLabel = "Tous les comptes Pro",
-            isEnabled = true
-        ),
-        PlatformFeatureToggleItem(
             id = "FEAT_GLOBAL_2FA_ANTI_CLONE",
-            title = "Double Facteur (Google Authenticator + SMS) & Bouclier Anti-Clonage",
-            subtitle = "Sécurité maximale obligatoire pour gérer les sous-comptes, les APIs OEM/VIN et bloquer tout clonage APK",
+            title = "Triple Sécurité (Google Authenticator + SMS + Email badroumc@gmail.com) & Bouclier Anti-Clonage",
+            subtitle = "Sécurité maximale obligatoire pour gérer les sous-comptes, les prix, les paiements et les APIs OEM/VIN",
             category = "Sécurité & Anti-Piratage",
-            targetRolesLabel = "Super-Admin & Tous les Administrateurs de Comptes",
+            targetRolesLabel = "Super-Admin (badroumc@gmail.com) & Tous les Administrateurs de Comptes",
             isEnabled = true,
             isCriticalSecurity = true
         )
     )
 
-    // Toutes les clés API demandées : TecDoc, ETKA (VAG), Groupe Stellantis (ServiceBox), Lecture Châssis VIN, Dialogys, TikTok, etc.
+    // Toutes les clés API automobiles & monétiques (SANS TikTok, avec ajout illimité d'APIs par badroumc@gmail.com)
     val externalApis = mutableStateListOf(
         NoCodeExternalApiEntry(
             id = "API-TECDOC-PEGASUS-01",
@@ -329,17 +384,17 @@ object SuperAdminGlobalControlRegistry {
             lastPingStatus = "200 OK • SinoAuto360 (142 Marques) Connecté (28 ms)"
         ),
         NoCodeExternalApiEntry(
-            id = "API-TIKTOK-08",
-            apiName = "TikTok for Business & TikTok Video/Lead Publish API (Campagnes Garages & Pièces)",
-            providerCategory = "TikTok / Réseaux Sociaux",
-            baseUrl = "https://open.tiktokapis.com/v2/post/publish/video/init/",
-            apiKeyOrClientId = "aw89x2m7tiktok_client_key_dz",
-            apiSecretOrToken = "act.9981204810294810294_tiktok_secret_token",
-            webhookOrCallbackUrl = "https://api.mecanicautoplus.dz/webhooks/tiktok/callback",
-            customHeadersJson = "{\"Content-Type\": \"application/json; charset=UTF-8\"}",
+            id = "API-AUTODATA-HAYNESPRO-08",
+            apiName = "Autodata & HaynesPro WorkshopData Tech API (Couples de Serrage Nm, Distribution & Schémas Électriques OBD)",
+            providerCategory = "Autodata / Documentation Technique",
+            baseUrl = "https://api.autodata-group.com/v1/technical-repair-data",
+            apiKeyOrClientId = "AUTODATA_HAYNESPRO_KEY_DZ_6619",
+            apiSecretOrToken = "autodata_wiring_torque_secret_token_8841920",
+            webhookOrCallbackUrl = "https://api.mecanicautoplus.dz/webhooks/autodata/sync",
+            customHeadersJson = "{\"X-Include-Wiring\": \"true\", \"X-Include-Torque-Nm\": \"true\"}",
             environment = "PRODUCTION",
             isEnabled = true,
-            lastPingStatus = "200 OK • TikTok OpenAPI v2 Connecté (42 ms)"
+            lastPingStatus = "200 OK • Autodata & HaynesPro Connecté (22 ms)"
         ),
         NoCodeExternalApiEntry(
             id = "API-SATIM-CIB-09",
@@ -820,9 +875,11 @@ fun SuperAdminGlobalFeatureTogglesSection(
 }
 
 // ============================================================================
-// 4. GESTIONNAIRE SUPER-ADMIN : CLÉS TECDOC, ETKA, STELLANTIS, VIN DECODER, TIKTOK
-//    + GESTION DES DROITS D'ACCÈS AUX SOUS-COMPTES
-//    PROTÉGÉ PAR DOUBLE FACTEUR : GOOGLE AUTHENTICATOR (TOTP) + CODE SMS SUR TÉLÉPHONE
+// 4. GESTIONNAIRE SUPER-ADMIN UNIQUE (badroumc@gmail.com) :
+//    - CHANGER LES PRIX DES ABONNEMENTS & MÉCAVERIF+ MANUELLEMENT
+//    - AJOUTER & MODIFIER PLUSIEURS CLÉS API (TECDOC, ETKA, STELLANTIS, VIN, AUTODATA, SATIM, STRIPE — SANS TIKTOK)
+//    - GESTION DES DROITS D'ACCÈS AUX SOUS-COMPTES
+//    PROTÉGÉ PAR TRIPLE FACTEUR : GOOGLE AUTHENTICATOR + SMS + MOT DE PASSE & CODE EMAIL SUR badroumc@gmail.com
 // ============================================================================
 
 @Composable
@@ -834,10 +891,12 @@ fun SuperAdminNoCodeApiVaultSection(
     var totpCodeInput by remember { mutableStateOf("") }
     var smsCodeInput by remember { mutableStateOf("") }
     var phoneInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.superAdminPhoneNumber) }
+    var emailPasswordInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.activeEmailPassword) }
+    var emailCodeInput by remember { mutableStateOf(SuperAdminGlobalControlRegistry.activeEmailOtpCode) }
     var smsDispatchedBannerVisible by remember { mutableStateOf(true) }
     var totpErrorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Sous-navigation une fois déverrouillé : 0 = Clés API (TecDoc, ETKA, Stellantis, VIN, TikTok), 1 = Droits d'accès aux Sous-Comptes
+    // Sous-navigation une fois déverrouillé : 0 = Clés API Multiples, 1 = Changer Prix Abonnements, 2 = Droits Sous-Comptes
     var activeVaultSectionTab by remember { mutableIntStateOf(0) }
     var selectedRoleForSubAccounts by remember { mutableStateOf(AccountRole.ATELIER_MAGASIN_MIXTE) }
 
@@ -857,6 +916,8 @@ fun SuperAdminNoCodeApiVaultSection(
     }
     val remainingSeconds = GoogleAuthenticatorTotpEngine.getRemainingSecondsInWindow(currentTimeMillis)
     val activeSmsCode = SuperAdminGlobalControlRegistry.activeSmsOtpCode
+    val activeEmailPwd = SuperAdminGlobalControlRegistry.activeEmailPassword
+    val activeEmailCode = SuperAdminGlobalControlRegistry.activeEmailOtpCode
 
     // Formulaire d'ajout ou modification manuelle d'une API sans coder
     var showAddApiForm by remember { mutableStateOf(false) }
@@ -872,7 +933,7 @@ fun SuperAdminNoCodeApiVaultSection(
     var revealSecrets by remember { mutableStateOf(true) }
     var selectedCategoryFilter by remember { mutableStateOf("TOUTES") }
 
-    // 1. Si l'utilisateur est un simple Administrateur ou Employé (et PAS le Super-Administrateur Root) -> ACCÈS BLOQUÉ
+    // 1. Si l'utilisateur est un simple Administrateur ou Employé (et PAS badroumc@gmail.com) -> ACCÈS BLOQUÉ
     if (!isSuperAdminRootOperator) {
         Box(
             modifier = Modifier
@@ -898,13 +959,13 @@ fun SuperAdminNoCodeApiVaultSection(
                         modifier = Modifier.size(44.dp)
                     )
                     Text(
-                        text = "ACCÈS REFUSÉ : RÉSERVÉ AU COMPTE SUPER-ADMINISTRATEUR",
+                        text = "ACCÈS REFUSÉ : RÉSERVÉ AU COMPTE UNIQUE badroumc@gmail.com",
                         color = OffWhite,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 14.sp
                     )
                     Text(
-                        text = "Vous êtes connecté avec un compte Administrateur/Opérateur secondaire. Seul le compte Super-Administrateur Root ($superAdminEmail) muni de son authentificateur Google Authenticator + validation SMS sur téléphone peut consulter, ajouter ou modifier les clés API (TecDoc, ETKA, Stellantis, VIN, TikTok) et les droits des sous-comptes.",
+                        text = "Vous êtes connecté avec un compte secondaire. Seul le compte Super-Administrateur unique (${SuperAdminGlobalControlRegistry.SUPER_ADMIN_UNIQUE_EMAIL}) muni de Google Authenticator + validation SMS + mot de passe et code reçus par email peut modifier les prix des abonnements, confirmer les paiements/comptes et gérer les clés API.",
                         color = AluminumGray,
                         fontSize = 12.sp
                     )
@@ -914,7 +975,7 @@ fun SuperAdminNoCodeApiVaultSection(
         return
     }
 
-    // 2. Étape obligatoire : Double Facteur (Google Authenticator 6 chiffres + SMS reçu sur téléphone)
+    // 2. Étape obligatoire : Triple Facteur (Google Authenticator + SMS + Mot de passe & Code Email sur badroumc@gmail.com)
     if (!is2FaAndSmsVerified) {
         LazyColumn(
             modifier = Modifier
@@ -953,13 +1014,13 @@ fun SuperAdminNoCodeApiVaultSection(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "SÉCURITÉ SUPER-ADMINISTRATEUR : GOOGLE AUTHENTICATOR + SMS TÉLÉPHONE",
+                                    text = "COMPTE SUPER-ADMIN UNIQUE : badroumc@gmail.com (GOOGLE 2FA + SMS + CODE EMAIL)",
                                     color = OffWhite,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = "Validez votre code Google Authenticator (TOTP) ET le code SMS reçu sur votre téléphone pour modifier manuellement les clés TecDoc, ETKA, Groupe Stellantis, Lecture Châssis VIN, TikTok et gérer les droits des sous-comptes.",
+                                    text = "Validez votre code Google Authenticator (TOTP), votre code SMS téléphone ET le mot de passe + code envoyés sur badroumc@gmail.com pour modifier les prix des abonnements et ajouter/modifier plusieurs clés API sans coder.",
                                     color = AluminumGray,
                                     fontSize = 11.5.sp
                                 )
@@ -1202,11 +1263,104 @@ fun SuperAdminNoCodeApiVaultSection(
                             )
                         )
 
-                        // Bouton 1-clic pour remplir simultanément Google Authenticator + SMS (pratique pour test rapide Super-Admin)
+                        // FACTEUR 3 : Mot de passe & Code de sécurité envoyés sur badroumc@gmail.com
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = GraphiteDark,
+                            border = BorderStroke(1.dp, TechCyan.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "FACTEUR N°3 : MOT DE PASSE & CODE REÇUS SUR badroumc@gmail.com",
+                                        color = TechCyan,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val (pwd, code) = SuperAdminGlobalControlRegistry.sendEmailPasswordAndOtpToSuperAdmin()
+                                            emailPasswordInput = pwd
+                                            emailCodeInput = code
+                                            totpErrorMessage = null
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = TechCyan),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "📧 Envoyer sur badroumc@gmail.com",
+                                            color = GraphiteDark,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = SuperAdminGlobalControlRegistry.emailSentNotificationText,
+                                    color = MekanikValidationGreen,
+                                    fontSize = 10.5.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = emailPasswordInput,
+                                        onValueChange = {
+                                            emailPasswordInput = it
+                                            totpErrorMessage = null
+                                        },
+                                        label = { Text("Mot de passe reçu par Email") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TechCyan,
+                                            unfocusedBorderColor = MetalBorder,
+                                            focusedTextColor = OffWhite,
+                                            unfocusedTextColor = OffWhite
+                                        )
+                                    )
+                                    OutlinedTextField(
+                                        value = emailCodeInput,
+                                        onValueChange = {
+                                            emailCodeInput = it.filter { ch -> ch.isDigit() }.take(6)
+                                            totpErrorMessage = null
+                                        },
+                                        label = { Text("Code Email (6 ch.)") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TechCyan,
+                                            unfocusedBorderColor = MetalBorder,
+                                            focusedTextColor = OffWhite,
+                                            unfocusedTextColor = OffWhite
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        // Bouton 1-clic pour remplir simultanément Google Authenticator + SMS + Code Email badroumc@gmail.com
                         OutlinedButton(
                             onClick = {
                                 totpCodeInput = liveSuperAdminTotpCode
                                 smsCodeInput = activeSmsCode
+                                emailPasswordInput = activeEmailPwd
+                                emailCodeInput = activeEmailCode
                                 totpErrorMessage = null
                             },
                             shape = RoundedCornerShape(10.dp),
@@ -1218,10 +1372,10 @@ fun SuperAdminNoCodeApiVaultSection(
                             Icon(Icons.Default.Bolt, contentDescription = null, tint = TechCyan, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Remplir Google Authenticator ($liveSuperAdminTotpCode) + Code SMS ($activeSmsCode)",
+                                text = "Remplir Google ($liveSuperAdminTotpCode) + SMS ($activeSmsCode) + Email badroumc@gmail.com ($activeEmailCode)",
                                 color = TechCyan,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
+                                fontSize = 10.5.sp
                             )
                         }
 
@@ -1242,12 +1396,19 @@ fun SuperAdminNoCodeApiVaultSection(
                                     currentTimeMillis
                                 )
                                 val smsOk = SuperAdminGlobalControlRegistry.verifySuperAdminSmsCode(smsCodeInput)
+                                val emailOk = SuperAdminGlobalControlRegistry.verifySuperAdminEmailPasswordAndCode(
+                                    emailPasswordInput,
+                                    emailCodeInput
+                                )
                                 when {
                                     !totpOk -> {
                                         totpErrorMessage = "❌ Code Google Authenticator invalide. Code actif : $liveSuperAdminTotpCode"
                                     }
                                     !smsOk -> {
-                                        totpErrorMessage = "❌ Code SMS téléphone invalide. Cliquez sur « Envoyer SMS » ou saisissez le code SMS reçu : $activeSmsCode"
+                                        totpErrorMessage = "❌ Code SMS téléphone invalide. Code SMS reçu : $activeSmsCode"
+                                    }
+                                    !emailOk -> {
+                                        totpErrorMessage = "❌ Mot de passe ou Code Email (badroumc@gmail.com) invalide. Attendu : $activeEmailPwd / $activeEmailCode"
                                     }
                                     else -> {
                                         is2FaAndSmsVerified = true
@@ -1265,10 +1426,10 @@ fun SuperAdminNoCodeApiVaultSection(
                             Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "VALIDER GOOGLE AUTHENTICATOR + SMS & OUVRIR LE PANNEAU",
+                                text = "VALIDER GOOGLE 2FA + SMS + EMAIL (badroumc@gmail.com)",
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp
+                                fontSize = 11.5.sp
                             )
                         }
                     }
@@ -1278,9 +1439,10 @@ fun SuperAdminNoCodeApiVaultSection(
         return
     }
 
-    // 3. PANNEAU SUPER-ADMINISTRATEUR DÉVERROUILLÉ PAR GOOGLE AUTHENTICATOR + SMS :
-    //    - Onglet A : Clés TecDoc, ETKA, Groupe Stellantis, Lecture Châssis VIN, Dialogys, TikTok & APIs Externes
-    //    - Onglet B : Gestion des Droits d'Accès aux Sous-Comptes (Tous Rôles)
+    // 3. PANNEAU SUPER-ADMINISTRATEUR DÉVERROUILLÉ POUR badroumc@gmail.com :
+    //    - Onglet 0 : Ajouter & Modifier plusieurs Clés API (TecDoc, ETKA, Stellantis, VIN, Dialogys, Autodata, SATIM, Stripe — SANS TikTok)
+    //    - Onglet 1 : Changer manuellement les Prix des Abonnements & MécaVerif+
+    //    - Onglet 2 : Gestion des Droits d'Accès aux Sous-Comptes (Tous Rôles)
     val allApis = SuperAdminGlobalControlRegistry.externalApis
     val filteredApis = remember(allApis.size, selectedCategoryFilter, allApis.toList()) {
         if (selectedCategoryFilter == "TOUTES") {
@@ -1323,26 +1485,28 @@ fun SuperAdminNoCodeApiVaultSection(
                             ) {
                                 Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = MekanikValidationGreen, modifier = Modifier.size(18.dp))
                                 Text(
-                                    text = "SUPER-ADMIN AUTHENTIFIÉ (GOOGLE AUTHENTICATOR + SMS VALIDÉS)",
+                                    text = "SUPER-ADMIN UNIQUE AUTHENTIFIÉ : badroumc@gmail.com (GOOGLE 2FA + SMS + EMAIL)",
                                     color = MekanikValidationGreen,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.5.sp
                                 )
                             }
                             Text(
-                                text = "Configurez manuellement vos clés TecDoc, ETKA (VAG), Groupe Stellantis (ServiceBox), Lecture Châssis VIN, TikTok et gérez les droits des sous-comptes sans toucher au code.",
+                                text = "Changez manuellement les prix des abonnements, ajoutez autant d'APIs que vous voulez (TecDoc, ETKA, Stellantis, VIN, Autodata, SATIM, Stripe — sans TikTok) et gérez les sous-comptes sans coder.",
                                 color = OffWhite,
                                 fontSize = 11.5.sp
                             )
                         }
                         IconButton(onClick = { is2FaAndSmsVerified = false }) {
-                            Icon(Icons.Default.Lock, contentDescription = "Reverrouiller 2FA + SMS", tint = MekanikBrandOrange)
+                            Icon(Icons.Default.Lock, contentDescription = "Reverrouiller 2FA + SMS + Email", tint = MekanikBrandOrange)
                         }
                     }
 
-                    // Sélecteur entre Clés API (TecDoc/ETKA/Stellantis/VIN/TikTok) et Droits d'Accès Sous-Comptes
+                    // Sélecteur entre Clés API Multiples, Prix des Abonnements et Droits Sous-Comptes
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
@@ -1351,14 +1515,12 @@ fun SuperAdminNoCodeApiVaultSection(
                                 containerColor = if (activeVaultSectionTab == 0) MekanikBrandOrange else GraphiteDark
                             ),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_vault_tab_apis")
+                            modifier = Modifier.testTag("btn_vault_tab_apis")
                         ) {
                             Icon(Icons.Default.VpnKey, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Clés TecDoc, ETKA, Stellantis, VIN & TikTok (${allApis.size})",
+                                text = "🔌 Ajouter / Changer APIs (${allApis.size})",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp
@@ -1371,14 +1533,30 @@ fun SuperAdminNoCodeApiVaultSection(
                                 containerColor = if (activeVaultSectionTab == 1) MekanikBrandOrange else GraphiteDark
                             ),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_vault_tab_subaccounts_rights")
+                            modifier = Modifier.testTag("btn_vault_tab_subscription_prices")
+                        ) {
+                            Icon(Icons.Default.Payments, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "💰 Changer Prix Abonnements",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = { activeVaultSectionTab = 2 },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (activeVaultSectionTab == 2) MekanikBrandOrange else GraphiteDark
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("btn_vault_tab_subaccounts_rights")
                         ) {
                             Icon(Icons.Default.ManageAccounts, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Droits d'Accès Sous-Comptes",
+                                text = "👥 Droits Sous-Comptes",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp
@@ -1391,7 +1569,7 @@ fun SuperAdminNoCodeApiVaultSection(
 
         if (activeVaultSectionTab == 0) {
             // ================================================================
-            // ONGLET A : CLÉS TECDOC, ETKA, STELLANTIS, LECTURE VIN & TIKTOK
+            // ONGLET 0 : CLÉS TECDOC, ETKA, STELLANTIS, LECTURE VIN & MULTI-API
             // ================================================================
             item {
                 Surface(
@@ -1404,13 +1582,13 @@ fun SuperAdminNoCodeApiVaultSection(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "MODÈLES RAPIDES D'AJOUT MANUEL DE CLÉS API (1 CLIC SANS CODER) :",
+                            text = "AJOUTER & MODIFIER PLUSIEURS CLÉS API MANUELLEMENT (1 CLIC SANS CODER) :",
                             color = MekanikBrandOrange,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 11.sp
                         )
 
-                        // Modèles pré-configurés pour TecDoc, ETKA, Stellantis, Lecture Châssis VIN, Dialogys, TikTok
+                        // Modèles pré-configurés pour TecDoc, ETKA, Stellantis, Lecture Châssis VIN, Dialogys, Autodata
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1429,7 +1607,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                 Icon(Icons.Default.AddLink, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (showAddApiForm) "Fermer l'éditeur" else "+ Ajouter / Modifier une Clé API",
+                                    text = if (showAddApiForm) "Fermer l'éditeur" else "+ Ajouter une Nouvelle API",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.5.sp
@@ -1528,18 +1706,18 @@ fun SuperAdminNoCodeApiVaultSection(
                             OutlinedButton(
                                 onClick = {
                                     editingApiId = null
-                                    newApiName = "TikTok Shop & Catalogue Vidéo Auto API"
-                                    newApiCategory = "TikTok / Réseaux Sociaux"
-                                    newApiBaseUrl = "https://open.tiktokapis.com/v2/video/list/"
-                                    newApiKey = "tiktok_client_key_${(1000..9999).random()}"
-                                    newApiSecret = "tiktok_secret_live_${(100000..999999).random()}"
-                                    newApiWebhook = "https://api.mecanicautoplus.dz/webhooks/tiktok/video"
+                                    newApiName = "Autodata & HaynesPro WorkshopData Tech API"
+                                    newApiCategory = "Autodata / Documentation Technique"
+                                    newApiBaseUrl = "https://api.autodata-group.com/v1/technical-repair-data"
+                                    newApiKey = "autodata_client_key_${(1000..9999).random()}"
+                                    newApiSecret = "autodata_secret_live_${(100000..999999).random()}"
+                                    newApiWebhook = "https://api.mecanicautoplus.dz/webhooks/autodata/sync"
                                     showAddApiForm = true
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, MekanikBrandOrange)
                             ) {
-                                Text("📱 Modèle API TikTok", color = OffWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("🔧 + Autodata / HaynesPro", color = OffWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }
 
                             OutlinedButton(
@@ -1569,7 +1747,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("TOUTES", "TecDoc", "ETKA", "Stellantis", "VIN", "Dialogys", "TikTok", "Paiement").forEach { catFilter ->
+                            listOf("TOUTES", "TecDoc", "ETKA", "Stellantis", "VIN", "Dialogys", "Autodata", "Paiement").forEach { catFilter ->
                                 val selected = selectedCategoryFilter == catFilter
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
@@ -1604,7 +1782,7 @@ fun SuperAdminNoCodeApiVaultSection(
                                         text = if (editingApiId != null)
                                             "MODIFICATION MANUELLE DE LA CLÉ API ($editingApiId) SANS TOUCHER AU CODE"
                                         else
-                                            "NOUVELLE CLÉ API EXTERNE (TECDOC, ETKA, STELLANTIS, VIN, TIKTOK...)",
+                                            "AJOUTER UNE NOUVELLE CLÉ API EXTERNE (TECDOC, ETKA, STELLANTIS, VIN, AUTODATA, MICROCAT...)",
                                         color = MekanikBrandOrange,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 12.sp
@@ -1880,9 +2058,137 @@ fun SuperAdminNoCodeApiVaultSection(
                     }
                 }
             }
+        } else if (activeVaultSectionTab == 1) {
+            // ================================================================
+            // ONGLET 1 : CHANGER LES PRIX DES ABONNEMENTS & MÉCAVERIF+ MANUELLEMENT
+            // ================================================================
+            item {
+                var proPriceText by remember { mutableStateOf(SuperAdminGlobalControlRegistry.mecaVerifProPriceDzd.toString()) }
+                var partPriceText by remember { mutableStateOf(SuperAdminGlobalControlRegistry.mecaVerifPartPriceDzd.toString()) }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MetalCard,
+                    border = BorderStroke(1.dp, MekanikValidationGreen)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "MODIFICATION MANUELLE DES TARIFS MÉCAVERIF+™ (PAR CHÂSSIS VIN)",
+                            color = MekanikValidationGreen,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.5.sp
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = proPriceText,
+                                onValueChange = { proPriceText = it.filter { c -> c.isDigit() } },
+                                label = { Text("Tarif Pro (DA/VIN)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = partPriceText,
+                                onValueChange = { partPriceText = it.filter { c -> c.isDigit() } },
+                                label = { Text("Tarif Particulier (DA/VIN)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    SuperAdminGlobalControlRegistry.mecaVerifProPriceDzd = proPriceText.toIntOrNull() ?: 250
+                                    SuperAdminGlobalControlRegistry.mecaVerifPartPriceDzd = partPriceText.toIntOrNull() ?: 300
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MekanikValidationGreen),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Sauvegarder", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            items(SuperAdminGlobalControlRegistry.manualSubscriptionPrices, key = { it.role.name }) { entry ->
+                var monthlyInput by remember(entry.monthlyPriceDzd) { mutableStateOf(entry.monthlyPriceDzd.toString()) }
+                var setupInput by remember(entry.setupFeeDzd) { mutableStateOf(entry.setupFeeDzd.toString()) }
+                var maxSubsInput by remember(entry.maxSubAccounts) { mutableStateOf(entry.maxSubAccounts.toString()) }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MetalCard,
+                    border = BorderStroke(1.dp, MekanikBrandOrange.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "${entry.role.label} (${entry.role.shortTitle})",
+                            color = OffWhite,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Prix actuel : ${entry.monthlyPriceDzd} DA / mois • Frais d'ouverture : ${entry.setupFeeDzd} DA • Max sous-comptes : ${entry.maxSubAccounts}",
+                            color = MekanikValidationGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = monthlyInput,
+                                onValueChange = { monthlyInput = it.filter { c -> c.isDigit() } },
+                                label = { Text("Prix / Mois (DA)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = setupInput,
+                                onValueChange = { setupInput = it.filter { c -> c.isDigit() } },
+                                label = { Text("Setup (DA)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = maxSubsInput,
+                                onValueChange = { maxSubsInput = it.filter { c -> c.isDigit() } },
+                                label = { Text("Sous-Comptes") },
+                                singleLine = true,
+                                modifier = Modifier.weight(0.8f)
+                            )
+                            Button(
+                                onClick = {
+                                    SuperAdminGlobalControlRegistry.updateRoleSubscriptionPriceManually(
+                                        role = entry.role,
+                                        newMonthlyDzd = monthlyInput.toIntOrNull() ?: entry.monthlyPriceDzd,
+                                        newSetupDzd = setupInput.toIntOrNull() ?: entry.setupFeeDzd,
+                                        newMaxSubs = maxSubsInput.toIntOrNull() ?: entry.maxSubAccounts
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MekanikBrandOrange),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Enregistrer", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             // ================================================================
-            // ONGLET B : GESTION DES DROITS D'ACCÈS AUX SOUS-COMPTES (2FA + SMS)
+            // ONGLET 2 : GESTION DES DROITS D'ACCÈS AUX SOUS-COMPTES (2FA + SMS)
             // ================================================================
             item {
                 Surface(

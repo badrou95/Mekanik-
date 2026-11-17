@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import {
   ACCOUNT_ROLES,
   AccountRoleId,
+  AccountRoleMeta,
+  SUPER_ADMIN_UNIQUE_EMAIL,
   SubAccountMember,
   UserAccountSession
 } from "./typesAndData";
@@ -240,7 +242,27 @@ export const App: React.FC = () => {
   );
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Interrupteurs globaux pilotés par le Super-Administrateur
+  // Tarifs des abonnements & MécaVerif+ modifiables manuellement par le Super-Admin (badroumc@gmail.com)
+  const [rolesPricing, setRolesPricing] = useState<Record<AccountRoleId, AccountRoleMeta>>(() => {
+    try {
+      const saved = localStorage.getItem("mekanik_superadmin_roles_pricing_v1");
+      if (saved) return JSON.parse(saved);
+    } catch (_e) {}
+    return ACCOUNT_ROLES;
+  });
+
+  const [mecaVerifPrices, setMecaVerifPrices] = useState<{
+    proPriceDzd: number;
+    partPriceDzd: number;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem("mekanik_superadmin_mecaverif_prices_v1");
+      if (saved) return JSON.parse(saved);
+    } catch (_e) {}
+    return { proPriceDzd: 250, partPriceDzd: 300 };
+  });
+
+  // Interrupteurs globaux pilotés par le Super-Administrateur (badroumc@gmail.com)
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({
     vinDecoder: true,
     mecaVerif: true,
@@ -362,7 +384,7 @@ export const App: React.FC = () => {
   // =========================================================================
   // SÉPARATION STRICTE DES COMPTES : NAVIGATION FILTRÉE PAR FORMULE CHOISIE
   // =========================================================================
-  const roleMeta = ACCOUNT_ROLES[currentAccount.role];
+  const roleMeta = rolesPricing[currentAccount.role] || ACCOUNT_ROLES[currentAccount.role];
 
   const getFilteredNavigationForRole = (
     role: AccountRoleId
@@ -623,7 +645,7 @@ export const App: React.FC = () => {
             })}
           </nav>
 
-          {/* Accès Super-Administrateur 2FA + SMS */}
+          {/* Accès Super-Administrateur Unique : badroumc@gmail.com (Google 2FA + SMS + Email) */}
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${MekanikTheme.border}` }}>
             <button
               onClick={() => setActiveTab("SUPER_ADMIN_2FA")}
@@ -641,11 +663,11 @@ export const App: React.FC = () => {
                 cursor: "pointer"
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 12.5, color: MekanikTheme.orange }}>
-                🔐 Super-Administrateur (2FA + SMS)
+              <div style={{ fontWeight: 900, fontSize: 12, color: MekanikTheme.orange }}>
+                🔐 Super-Admin ({SUPER_ADMIN_UNIQUE_EMAIL})
               </div>
-              <div style={{ fontSize: 10.5, color: MekanikTheme.textSecondary }}>
-                Clés API TecDoc / ETKA / Stellantis & ON/OFF
+              <div style={{ fontSize: 10, color: MekanikTheme.textSecondary }}>
+                Prix Abonnements • Paiements • Comptes • Multi-APIs (2FA+SMS+Email)
               </div>
             </button>
           </div>
@@ -1537,8 +1559,8 @@ export const App: React.FC = () => {
                   gap: 12
                 }}
               >
-                {(Object.keys(ACCOUNT_ROLES) as AccountRoleId[]).map((rk) => {
-                  const meta = ACCOUNT_ROLES[rk];
+                {(Object.keys(rolesPricing) as AccountRoleId[]).map((rk) => {
+                  const meta = rolesPricing[rk];
                   return (
                     <div
                       key={rk}
@@ -1593,12 +1615,55 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* VUE 8 : SUPER-ADMINISTRATEUR (DOUBLE 2FA TOTP + SMS & CLÉS API)    */}
+        {/* VUE 8 : SUPER-ADMINISTRATEUR UNIQUE (badroumc@gmail.com)          */}
         {/* ================================================================= */}
         {activeTab === "SUPER_ADMIN_2FA" && (
           <SuperAdminPortalView
             allAccounts={savedAccounts}
+            rolesPricing={rolesPricing}
+            mecaVerifPrices={mecaVerifPrices}
             featureFlags={featureFlags}
+            onUpdateRolePricing={(roleId, monthlyPriceDzd, setupFeeDzd, maxSubAccounts) => {
+              const next = {
+                ...rolesPricing,
+                [roleId]: {
+                  ...rolesPricing[roleId],
+                  monthlyPriceDzd,
+                  setupFeeDzd,
+                  maxSubAccounts
+                }
+              };
+              setRolesPricing(next);
+              try {
+                localStorage.setItem("mekanik_superadmin_roles_pricing_v1", JSON.stringify(next));
+              } catch (_e) {}
+            }}
+            onUpdateMecaVerifPrices={(proPriceDzd, partPriceDzd) => {
+              const next = { proPriceDzd, partPriceDzd };
+              setMecaVerifPrices(next);
+              try {
+                localStorage.setItem(
+                  "mekanik_superadmin_mecaverif_prices_v1",
+                  JSON.stringify(next)
+                );
+              } catch (_e) {}
+            }}
+            onUpdateAccountStatusOrRole={(userId, nextStatus, nextRole) => {
+              const updatedList = savedAccounts.map((acc) =>
+                acc.userId === userId
+                  ? {
+                      ...acc,
+                      approvalStatus: nextStatus,
+                      role: nextRole || acc.role
+                    }
+                  : acc
+              );
+              setSavedAccounts(updatedList);
+              if (currentAccount.userId === userId) {
+                const updatedCurrent = updatedList.find((a) => a.userId === userId);
+                if (updatedCurrent) setCurrentAccount(updatedCurrent);
+              }
+            }}
             onToggleFeatureFlag={(key) => {
               setFeatureFlags({ ...featureFlags, [key]: !featureFlags[key] });
               showToast(`Module ${key} basculé avec succès !`);

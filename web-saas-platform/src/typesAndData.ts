@@ -1,12 +1,17 @@
 /**
  * MEKANIK+ — MODÈLES MÉTIER & BASE DE DONNÉES SAAS (INVESTOR-READY WEB PLATFORM)
+ * - Compte Super-Administrateur Unique : badroumc@gmail.com
+ * - Triple Authentification Super-Admin : Google Authenticator (TOTP) + SMS OTP + Mot de Passe & Code Email sur badroumc@gmail.com
+ * - Contrôle Manuel Total sans coder : Modification des prix des abonnements, Confirmation des paiements, Confirmation des comptes, Ajout & Modification illimitée d'APIs externes (TecDoc, ETKA, Stellantis, VIN, Dialogys, Xentry, Microcat, Autodata, SATIM, Stripe — SANS TikTok)
  * - Séparation stricte des 7 formules de comptes
  * - Compte Mixte Atelier + Magasin (1 Principal + 4 Sous-Comptes)
  * - Compte Spécial Carrosserie & Tôlerie (Photos Avant/Après obligatoires)
  * - MécaVerif+ (Courbe CarVertical + Photos Tôle + Paiement CIB/SATIM, Edahabia, BaridiMob, Chargily, Stripe)
  * - MekanikAI OBD-II + Documentation Technique & Schémas OEM
- * - Super-Administrateur Double 2FA (Google Authenticator + SMS OTP) & Clés API No-Code (TecDoc, ETKA, Stellantis, TikTok...)
  */
+
+export const SUPER_ADMIN_UNIQUE_EMAIL = "badroumc@gmail.com";
+export const SUPER_ADMIN_DEFAULT_PHONE = "+213 550 94 82 10";
 
 export type AccountRoleId =
   | "PARTICULIER"
@@ -128,7 +133,7 @@ export const ACCOUNT_ROLES: Record<AccountRoleId, AccountRoleMeta> = {
 export interface SubAccountMember {
   id: string;
   fullName: string;
-  roleLabel: string; // ex: "Chef d'Atelier", "Mécanicien Diagnostic", "Magasinier Stock", "Vendeur Comptoir"
+  roleLabel: string;
   email: string;
   phone: string;
   isActive: boolean;
@@ -156,8 +161,203 @@ export interface UserAccountSession {
   twoFactorEnabled: boolean;
   totpSecretKey: string;
   createdAt: string;
+  approvalStatus?: "EN_ATTENTE" | "CONFIRME" | "SUSPENDU";
   subAccounts: SubAccountMember[];
 }
+
+export interface SuperAdminPaymentItem {
+  id: string;
+  payerOrganization: string;
+  payerEmail: string;
+  planOrServiceLabel: string;
+  amountDzd: number;
+  paymentMethod: "CIB / SATIM" | "EDAHABIA" | "BARIDIMOB QR" | "VIREMENT CCP / RIB" | "STRIPE VISA";
+  referenceCode: string;
+  date: string;
+  status: "EN_ATTENTE" | "CONFIRME" | "REJETE";
+}
+
+export interface ExternalApiConfigRecord {
+  id: string;
+  name: string;
+  group: string;
+  endpoint: string;
+  apiKey: string;
+  apiSecret: string;
+  webhookUrl: string;
+  customHeadersJson: string;
+  enabled: boolean;
+  addedByEmail: string;
+}
+
+export const INITIAL_EXTERNAL_APIS: ExternalApiConfigRecord[] = [
+  {
+    id: "TECDOC_PEGASUS",
+    name: "TecDoc / TecAlliance Pegasus 3.0 Official Catalog API",
+    group: "Catalogue Pièces OEM, K-Type & Équivalences Multimabanques",
+    endpoint: "https://webservice.tecalliance.services/pegasus-3-0/services/TecdocToCatDLB.jsonEndpoint",
+    apiKey: "TD-LIVE-9948-MEKANIK-DZ-2026",
+    apiSecret: "tecdoc_secret_pegasus3_884920194",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/tecdoc-sync",
+    customHeadersJson: '{"X-TecDoc-Provider": "22491", "Accept-Language": "fr"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "ETKA_VAG",
+    name: "ETKA / Partslink24 Official VAG API (VW, Audi, Seat, Škoda, Cupra, Porsche)",
+    group: "Groupe VAG • Éclatés & Références PR par Châssis VIN",
+    endpoint: "https://api.partslink24.com/v2/vag-etka/chassis-lookup",
+    apiKey: "ETKA-VAG-7741-OEM-PRO",
+    apiSecret: "etka_vag_prcode_secret_token_559102",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/etka-vag",
+    customHeadersJson: '{"X-ETKA-Market": "RDW", "X-VAG-PR-Decode": "true"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "STELLANTIS_SERVICEBOX",
+    name: "Groupe Stellantis ServiceBox & SEDRE API (Peugeot, Citroën, DS, Fiat, Opel, Jeep)",
+    group: "Groupe Stellantis • VIN, OPR/DAM, Pièces OEM & Schémas Électriques SEDRE",
+    endpoint: "https://api.servicebox.stellantis.com/v3/vin-and-parts",
+    apiKey: "SBX-PSA-FCA-6630-TOKEN",
+    apiSecret: "stellantis_sedre_opr_dam_secret_991820",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/stellantis-servicebox",
+    customHeadersJson: '{"X-Stellantis-Brands": "PEUGEOT,CITROEN,DS,FIAT,OPEL,JEEP", "X-Include-SEDRE": "true"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "VIN_MASTER_DECODER",
+    name: "Logiciel Lecture Numéro de Châssis (VIN Master Decoder ISO-3779 / Vincario / AutoDNA)",
+    group: "Lecture Numéro de Châssis 17 Caractères, Code Moteur & Historique Kilométrique",
+    endpoint: "https://api.vindecoder.eu/v3.2/decode",
+    apiKey: "VIN-ISO-8821-GLOBAL-KEY",
+    apiSecret: "vin_wmi_vds_vis_hash_secret_2026",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/vin-decoder",
+    customHeadersJson: '{"X-Decode-Engine-Gearbox": "true", "X-Decode-SheetMetal": "true"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "RENAULT_DIALOGYS",
+    name: "Renault / Dacia / Nissan Alliance New Dialogys API",
+    group: "Groupe Renault • Pièces OEM, Plaques Ovales & Méthodes de Réparation",
+    endpoint: "https://dialogys-api.renault.com/v2/catalog",
+    apiKey: "DLG-REN-3391-DZ-PRO",
+    apiSecret: "renault_dacia_dialogys_token_448192",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/renault-dialogys",
+    customHeadersJson: '{"X-Alliance-Brands": "RENAULT,DACIA,NISSAN"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "MERCEDES_XENTRY_BMW_ETK",
+    name: "Mercedes-Benz Xentry Parts (EPC) & BMW Group ETK / ISTA API",
+    group: "Constructeurs Allemands Premium • Schémas & Pièces Châssis WDB/WBA",
+    endpoint: "https://b2bconnect.mercedes-benz.com/api/v2/epc-etk/parts",
+    apiKey: "MB-XENTRY-BMW-ETK-9910",
+    apiSecret: "xentry_etk_datacard_secret_773819",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/xentry-etk",
+    customHeadersJson: '{"X-DataCard-Options": "true"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "TOYOTA_HYUNDAI_MICROCAT",
+    name: "Microcat Live API (Toyota, Hyundai, Kia, Mitsubishi, Ford)",
+    group: "Constructeurs Asiatiques & Microcat • Décodage VIN & Références d'Origine",
+    endpoint: "https://api.microcat.infomedia.com.au/v3/oem-parts",
+    apiKey: "MCAT-ASIA-5520-DZ",
+    apiSecret: "microcat_live_secret_token_339104",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/microcat",
+    customHeadersJson: '{"X-Brands": "TOYOTA,HYUNDAI,KIA,MITSUBISHI,FORD"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "AUTODATA_HAYNESPRO",
+    name: "Autodata & HaynesPro WorkshopData Tech API (Couples de Serrage & Schémas OBD)",
+    group: "Documentation Technique, Courroies Distribution, Couples Nm & Brochage ECU",
+    endpoint: "https://api.autodata-group.com/v1/technical-repair-data",
+    apiKey: "AUTODATA-PRO-6619-MEKANIK",
+    apiSecret: "haynespro_vexa_tech_secret_118294",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/autodata",
+    customHeadersJson: '{"X-Include-Wiring": "true", "X-Include-Torque-Nm": "true"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  },
+  {
+    id: "SATIM_CHARGILY_STRIPE",
+    name: "Passerelle Monétique SATIM CIB / Edahabia / BaridiMob / Chargily & Stripe Live",
+    group: "Paiements Unitaires MécaVerif+ (250 / 300 DA) & Abonnements Mensuels",
+    endpoint: "https://pay.chargily.net/api/v2/checkouts",
+    apiKey: "PK-LIVE-SATIM-STRIPE-2026",
+    apiSecret: "sk_live_satim_edahabia_stripe_9948102",
+    webhookUrl: "https://api.mekanikplus.dz/webhooks/payments",
+    customHeadersJson: '{"X-Currency": "DZD", "X-Stripe-Fallback": "EUR_USD"}',
+    enabled: true,
+    addedByEmail: SUPER_ADMIN_UNIQUE_EMAIL
+  }
+];
+
+export const INITIAL_SUPER_ADMIN_PAYMENTS: SuperAdminPaymentItem[] = [
+  {
+    id: "PAY-2026-901",
+    payerOrganization: "SARL Garage & Pièces El-Djazair Auto+ (Mixte 1+4)",
+    payerEmail: "badrou@mekanikplus.dz",
+    planOrServiceLabel: "Abonnement Mensuel — Compte Mixte Atelier+Magasin (1+4)",
+    amountDzd: 14900,
+    paymentMethod: "CIB / SATIM",
+    referenceCode: "SATIM-AUTH-884920",
+    date: "17/11/2026 09:40",
+    status: "CONFIRME"
+  },
+  {
+    id: "PAY-2026-902",
+    payerOrganization: "Atelier MécaTech Pro Oran",
+    payerEmail: "contact@mecatech-oran.dz",
+    planOrServiceLabel: "Abonnement Mensuel — Compte Atelier Mécanique Pro",
+    amountDzd: 9900,
+    paymentMethod: "EDAHABIA",
+    referenceCode: "EDH-POSTE-441920",
+    date: "17/11/2026 10:15",
+    status: "EN_ATTENTE"
+  },
+  {
+    id: "PAY-2026-903",
+    payerOrganization: "Atelier Spécial Carrosserie & Tôlerie Laser Blida",
+    payerEmail: "tolerie@carrosserie-blida.dz",
+    planOrServiceLabel: "Abonnement Mensuel — Compte Spécial Carrosserie & Tôlerie",
+    amountDzd: 8900,
+    paymentMethod: "BARIDIMOB QR",
+    referenceCode: "BMOB-QR-773819",
+    date: "17/11/2026 10:32",
+    status: "EN_ATTENTE"
+  },
+  {
+    id: "PAY-2026-904",
+    payerOrganization: "Karim Benali (Compte Particulier)",
+    payerEmail: "karim.particulier@gmail.com",
+    planOrServiceLabel: "Achat Unitaire Rapport MécaVerif+ (VIN VF3MCYHZJKS491820)",
+    amountDzd: 300,
+    paymentMethod: "CIB / SATIM",
+    referenceCode: "MV-CIB-300DA-119",
+    date: "17/11/2026 10:48",
+    status: "EN_ATTENTE"
+  },
+  {
+    id: "PAY-2026-905",
+    payerOrganization: "EuroParts Grossiste & Importateur B2B Algérie",
+    payerEmail: "b2b@europarts-dz.com",
+    planOrServiceLabel: "Abonnement Mensuel — Compte Fournisseur B2B",
+    amountDzd: 24900,
+    paymentMethod: "VIREMENT CCP / RIB",
+    referenceCode: "BNA-RIB-9920184",
+    date: "17/11/2026 11:02",
+    status: "EN_ATTENTE"
+  }
+];
 
 export interface MileagePoint {
   year: number;
