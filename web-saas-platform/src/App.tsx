@@ -210,7 +210,12 @@ export const App: React.FC = () => {
       const raw = localStorage.getItem("mekanik_saas_accounts_v2");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter(
+            (a) => a && typeof a.userId === "string" && a.role && ACCOUNT_ROLES[a.role as AccountRoleId]
+          );
+          if (valid.length > 0) return valid;
+        }
       }
     } catch (_e) {}
     return INITIAL_DEMO_ACCOUNTS;
@@ -224,7 +229,7 @@ export const App: React.FC = () => {
         if (found) return found;
       }
     } catch (_e) {}
-    return savedAccounts[0];
+    return savedAccounts[0] || INITIAL_DEMO_ACCOUNTS[0];
   });
 
   useEffect(() => {
@@ -305,7 +310,12 @@ export const App: React.FC = () => {
   const [rolesPricing, setRolesPricing] = useState<Record<AccountRoleId, AccountRoleMeta>>(() => {
     try {
       const saved = localStorage.getItem("mekanik_superadmin_roles_pricing_v1");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return { ...ACCOUNT_ROLES, ...parsed };
+        }
+      }
     } catch (_e) {}
     return ACCOUNT_ROLES;
   });
@@ -316,7 +326,12 @@ export const App: React.FC = () => {
   }>(() => {
     try {
       const saved = localStorage.getItem("mekanik_superadmin_mecaverif_prices_v1");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.proPriceDzd === "number" && typeof parsed.partPriceDzd === "number") {
+          return parsed;
+        }
+      }
     } catch (_e) {}
     return { proPriceDzd: 250, partPriceDzd: 300 };
   });
@@ -492,7 +507,10 @@ export const App: React.FC = () => {
   // =========================================================================
   // SÉPARATION STRICTE DES COMPTES : NAVIGATION FILTRÉE PAR FORMULE CHOISIE
   // =========================================================================
-  const roleMeta = rolesPricing[currentAccount.role] || ACCOUNT_ROLES[currentAccount.role];
+  const roleMeta =
+    rolesPricing[currentAccount.role] ||
+    ACCOUNT_ROLES[currentAccount.role] ||
+    ACCOUNT_ROLES.MIXTE_ATELIER_MAGASIN;
 
   const getFilteredNavigationForRole = (
     role: AccountRoleId
@@ -797,56 +815,81 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Carte du Compte Actif & Boutons Inscription / Changement de Formule */}
+          {/* Carte du Compte Actif (si connecté) ou Accès Visiteur Public */}
           <div
             style={{
               padding: 12,
               borderRadius: 12,
               backgroundColor: MekanikTheme.bg,
-              border: `1.5px solid ${roleMeta.accentColor}`,
+              border: `1.5px solid ${isClientLoggedIn ? roleMeta.accentColor : MekanikTheme.orange}`,
               marginBottom: 16
             }}
           >
-            <div
-              style={{
-                display: "inline-block",
-                padding: "3px 8px",
-                borderRadius: 5,
-                backgroundColor: roleMeta.accentColor,
-                color: "#FFF",
-                fontWeight: 900,
-                fontSize: 10,
-                marginBottom: 6
-              }}
-            >
-              {roleMeta.shortBadge}
-            </div>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>{currentAccount.organizationName}</div>
-            <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, marginTop: 2 }}>
-              👤 {currentAccount.fullName} • {currentAccount.wilaya}
-            </div>
-            <div style={{ fontSize: 10.5, color: MekanikTheme.green, fontWeight: 700, marginTop: 4 }}>
-              ● Isolé : {currentAccount.organizationId} • 2FA Actif
-            </div>
+            {isClientLoggedIn ? (
+              <>
+                <div
+                  style={{
+                    display: "inline-block",
+                    padding: "3px 8px",
+                    borderRadius: 5,
+                    backgroundColor: roleMeta.accentColor,
+                    color: "#FFF",
+                    fontWeight: 900,
+                    fontSize: 10,
+                    marginBottom: 6
+                  }}
+                >
+                  {roleMeta.shortBadge}
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>{currentAccount.organizationName}</div>
+                <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, marginTop: 2 }}>
+                  👤 {currentAccount.fullName} • {currentAccount.wilaya}
+                </div>
+                <div style={{ fontSize: 10.5, color: MekanikTheme.green, fontWeight: 700, marginTop: 4 }}>
+                  ● Isolé : {currentAccount.organizationId} • 2FA Actif
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: "inline-block",
+                    padding: "3px 8px",
+                    borderRadius: 5,
+                    backgroundColor: MekanikTheme.orange,
+                    color: "#FFF",
+                    fontWeight: 900,
+                    fontSize: 10,
+                    marginBottom: 6
+                  }}
+                >
+                  PORTAIL PUBLIC MEKANIK+
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>Accès Client & Pro Isolé</div>
+                <div style={{ fontSize: 11, color: MekanikTheme.textSecondary, marginTop: 3 }}>
+                  Découvrez la plateforme, la vidéo tuto et les abonnements Mensuel / Annuel.
+                </div>
+              </>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 }}>
               <button
                 onClick={() => {
-                  setAuthModalInitialTab("SWITCH_ROLE");
+                  setAuthModalInitialTab("LOGIN");
                   setAuthModalOpen(true);
                 }}
                 style={{
                   padding: "7px 8px",
                   borderRadius: 7,
-                  border: `1px solid ${MekanikTheme.orange}`,
-                  backgroundColor: "rgba(240,120,54,0.18)",
+                  border: `1px solid ${MekanikTheme.green}`,
+                  backgroundColor: "rgba(34,197,94,0.14)",
                   color: "#FFF",
                   fontWeight: 800,
                   fontSize: 11,
                   cursor: "pointer"
                 }}
               >
-                🔄 Changer Compte
+                🔑 Connexion
               </button>
               <button
                 onClick={() => {
@@ -2193,7 +2236,7 @@ export const App: React.FC = () => {
           <PublicFacadeAndVideoTutorial
             rolesPricing={rolesPricing}
             mecaVerifPrices={mecaVerifPrices}
-            onOpenRegisterWithPlan={(roleId, billingCycle) => {
+            onStartRegistrationWithPlan={(roleId, billingCycle) => {
               setPreselectedRegisterRole(roleId);
               setSelectedBillingCycle(billingCycle);
               setAuthModalInitialTab("REGISTER");
@@ -2201,10 +2244,6 @@ export const App: React.FC = () => {
             }}
             onOpenLoginModal={() => {
               setAuthModalInitialTab("LOGIN");
-              setAuthModalOpen(true);
-            }}
-            onOpenSwitchRoleModal={() => {
-              setAuthModalInitialTab("SWITCH_ROLE");
               setAuthModalOpen(true);
             }}
           />
@@ -2217,7 +2256,7 @@ export const App: React.FC = () => {
           currentAccount={currentAccount}
           savedAccounts={savedAccounts}
           initialTab={authModalInitialTab}
-          initialRegisterRole={preselectedRegisterRole}
+          initialRole={preselectedRegisterRole}
           initialBillingCycle={selectedBillingCycle}
           onSelectOrRegisterAccount={handleSwitchOrRegisterAccount}
           onUpdateSubAccounts={(updatedSubs: SubAccountMember[]) => {

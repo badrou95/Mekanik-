@@ -19,6 +19,51 @@ const Theme = {
 
 export type BillingCycleType = "MENSUEL" | "ANNUEL";
 
+const ROLE_HIGHLIGHTS: Record<AccountRoleId, string[]> = {
+  PARTICULIER: [
+    "Carnet d'entretien & suivi multi-véhicules",
+    "Recherche de pièces compatibles par VIN",
+    "Rapports MécaVerif+ à l'acte (kilométrage & tôle)",
+    "Aucune interface complexe d'atelier"
+  ],
+  ATELIER_PRO: [
+    "Ordres de Réparation (OR) & Devis en DA",
+    "MekanikAI™ Diagnostic OBD-II & Schémas",
+    "Historique des Commandes filtré par atelier",
+    "Commandes B2B directes & MécaVerif+ Pro"
+  ],
+  MAGASIN_PIECES: [
+    "Catalogue visuel OEM (TecDoc / ETKA / Stellantis)",
+    "Gestion des stocks WMS & équivalences",
+    "Facturation comptoir & tarifs pro",
+    "Page Historique des Commandes B2B dédiée"
+  ],
+  MIXTE_ATELIER_MAGASIN: [
+    "100% Atelier Pro + 100% Magasin de Pièces",
+    "1 Compte Principal + 4 Sous-Comptes 2FA",
+    "MekanikAI™ OBD-II + Stock & Facturation",
+    "Historique des Commandes B2B en temps réel"
+  ],
+  CARROSSERIE_TOLERIE: [
+    "Catalogue tôlerie, optiques & boucliers par VIN",
+    "Photos Avant / Après obligatoires horodatées",
+    "Devis carrosserie, peinture & expertise",
+    "Commandes pièces OEM carrosserie B2B"
+  ],
+  FOURNISSEUR_B2B: [
+    "Publication catalogue grossiste & prix B2B",
+    "Réception des commandes garages en temps réel",
+    "Gestion stock multi-dépôts & expéditions",
+    "Jusqu'à 6 sous-comptes commerciaux 2FA"
+  ],
+  ENTREPRISE_FLOTTE: [
+    "Suivi kilométrique de toute la flotte auto",
+    "Alertes maintenance préventive & TCO",
+    "Audit MécaVerif+ parc & sinistres",
+    "Ordres de maintenance & suivi prestataires"
+  ]
+};
+
 interface PublicFacadeProps {
   rolesPricing: Record<AccountRoleId, AccountRoleMeta>;
   mecaVerifPrices: { proPriceDzd: number; partPriceDzd: number };
@@ -217,19 +262,40 @@ export const PublicFacadeAndVideoTutorial: React.FC<PublicFacadeProps> = ({
               transition: "all 320ms cubic-bezier(0.22, 1, 0.36, 1)"
             }}
           >
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <span style={{ fontSize: 36 }}>⚙️</span>
-              <span
-                style={{
-                  fontSize: 34,
-                  fontWeight: 900,
-                  color: Theme.orange,
-                  marginLeft: -4,
-                  textShadow: "0 0 14px rgba(240,120,54,0.9)"
-                }}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg
+                width="68"
+                height="68"
+                viewBox="0 0 64 64"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-label="Logo Mekanik+"
               >
-                +
-              </span>
+                {/* Engrenage mécanique */}
+                <path
+                  d="M32 10L35.2 14.2L40.4 12.6L41.5 17.8L46.8 18.6L45.4 23.8L49.8 26.8L46.4 31L49.8 35.2L45.4 38.2L46.8 43.4L41.5 44.2L40.4 49.4L35.2 47.8L32 52L28.8 47.8L23.6 49.4L22.5 44.2L17.2 43.4L18.6 38.2L14.2 35.2L17.6 31L14.2 26.8L18.6 23.8L17.2 18.6L22.5 17.8L23.6 12.6L28.8 14.2L32 10Z"
+                  stroke="#AEB6BF"
+                  strokeWidth="2.2"
+                  fill="#1C2833"
+                />
+                {/* Silhouette automobile dynamique */}
+                <path
+                  d="M17 35H45L42 28.5C41.3 27 39.8 26 38.1 26H26.5C24.8 26 23.2 27 22.3 28.5L19.5 32.5L17 35Z"
+                  fill="#F5F7F9"
+                />
+                <circle cx="23" cy="36.5" r="3" fill="#F07836" />
+                <circle cx="40" cy="36.5" r="3" fill="#F07836" />
+                {/* Clé mécanique */}
+                <path
+                  d="M21 43L29 35"
+                  stroke="#E53935"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+                {/* Signe + distinctif Mekanik+ */}
+                <rect x="44" y="10" width="14" height="14" rx="4" fill="#E53935" />
+                <path d="M51 13V21M47 17H55" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" />
+              </svg>
             </div>
           </div>
 
@@ -939,7 +1005,7 @@ export const PublicFacadeAndVideoTutorial: React.FC<PublicFacadeProps> = ({
                         ? "1 Compte Individuel"
                         : `1 Principal + ${meta.maxSubAccounts} Sous-Comptes (2FA)`}
                     </div>
-                    {meta.exclusiveFeatures.slice(0, 4).map((f, i) => (
+                    {(ROLE_HIGHLIGHTS[rk] || meta.allowedModules || []).slice(0, 4).map((f, i) => (
                       <div key={i} style={{ color: Theme.textPrimary }}>
                         ✓ {f}
                       </div>
